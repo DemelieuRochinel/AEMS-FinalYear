@@ -1,0 +1,46 @@
+# Node dependencies
+node_modules/
+
+# Environment files - NEVER upload these to GitHub
+.env
+*.env
+.env.local
+.env.production
+
+# Secrets and Environment Variables
+.env
+serviceAccountKey.json
+
+# Dependencies
+node_modules/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Firebase secret key - NEVER upload this
+serviceAccountKey.json
+*serviceAccount*.json
+
+# React build output
+build/
+dist/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# VS Code settings
+.vscode/settings.json
+
+# PlatformIO build files
+.pio/
+.platformio/
+
+# Python cache
+*.pyc
+__pycache__/
+
+# Logs
+*.log
+npm-debug.log*
