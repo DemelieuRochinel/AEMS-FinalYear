@@ -1,7 +1,7 @@
 
 require('dotenv').config();
 
-// ── Import all services ─────────────────────────────────────
+// Import all services 
 const db              = require('../config/firebase');
 const businessService = require('../services/businessService');
 const deviceService   = require('../services/deviceService');
@@ -11,19 +11,19 @@ const alertsService   = require('../services/alertsService');
 const userService     = require('../services/userService');
 const reportService   = require('../services/reportService');
 
-// // ── Test data IDs — all prefixed with test_ ─────────────────
+//Test data IDs — all prefixed with test_
 const IDs = {
   business: 'test_business_AEMS001',
   device:   'test_device_BUEA001',
   user:     'test_user_owner001',
 };
 
-// ── Test result counters ────────────────────────────────────
+//Test result counters
 let passed = 0;
 let failed = 0;
 let total  = 0;
 
-// ── Test helpers ────────────────────────────────────────────
+//Test helpers 
 const pass = (testName, detail = '') => {
   passed++;
   total++;
@@ -41,9 +41,7 @@ const section = (title) => {
   console.log(`  ── ${title} ${'─'.repeat(45 - title.length)}`);
 };
 
-// ═══════════════════════════════════════════════════════════
 //  TEST 1 — FIREBASE CONNECTION
-// ═══════════════════════════════════════════════════════════
 async function testFirebaseConnection() {
   section('Firebase Connection');
   try {
@@ -70,9 +68,7 @@ async function testFirebaseConnection() {
   }
 }
 
-// // ═══════════════════════════════════════════════════════════
 // //  TEST 2 — BUSINESS SERVICE
-// // ═══════════════════════════════════════════════════════════
 async function testBusinessService() {
   section('Business Service');
   try {
@@ -133,9 +129,7 @@ async function testBusinessService() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
 //  TEST 3 — DEVICE SERVICE
-// ═══════════════════════════════════════════════════════════
 async function testDeviceService() {
   section('Device Service');
   try {
@@ -201,9 +195,7 @@ async function testDeviceService() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
 //  TEST 4 — ROOM SERVICE
-// ═══════════════════════════════════════════════════════════
 async function testRoomService() {
   section('Room Service');
   try {
@@ -283,9 +275,7 @@ async function testRoomService() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
 //  TEST 5 — READINGS SERVICE
-// ═══════════════════════════════════════════════════════════
 async function testReadingsService() {
   section('Readings Service');
   try {
@@ -376,9 +366,7 @@ const tests = [
   }
 }
 
-// ═══════════════════════════════════════════════════════════
 //  TEST 6 — ALERTS SERVICE
-// ═══════════════════════════════════════════════════════════
 async function testAlertsService() {
   section('Alerts Service');
   try {
@@ -449,9 +437,7 @@ async function testAlertsService() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
 //  TEST 7 — USER SERVICE
-// ═══════════════════════════════════════════════════════════
 async function testUserService() {
   section('User Service');
   try {
@@ -553,9 +539,7 @@ async function testUserService() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
 //  CLEANUP — Remove all test data from Firebase
-// ═══════════════════════════════════════════════════════════
 async function cleanup() {
   section('Cleanup — Removing test data from Firebase');
   try {
@@ -579,17 +563,8 @@ async function cleanup() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
 //  MAIN — Run all tests in sequence
-// ═══════════════════════════════════════════════════════════
 async function runAllTests() {
-  console.log('');
-  console.log('╔═══════════════════════════════════════════════════════╗');
-  console.log('║         AEMS — SPRINT 1 TEST SUITE                   ║');
-  console.log('║         Database Layer — 7 Services                  ║');
-  console.log('║         LEKEUGO DEMELIEU ROCHINEL — FE22A247         ║');
-  console.log('║         University of Buea, Cameroon                 ║');
-  console.log('╚═══════════════════════════════════════════════════════╝');
 
   await testFirebaseConnection();
   await testBusinessService();
@@ -601,27 +576,13 @@ async function runAllTests() {
   await cleanup();
 
   // ── Final results ─────────────────────────────────────────
-  console.log('');
-  console.log('╔═══════════════════════════════════════════════════════╗');
-
-  if (failed === 0) {
-    console.log(`║  ✅  ALL ${total} TESTS PASSED                             ║`);
-    console.log('║  Sprint 1 complete — database layer is solid          ║');
-    console.log('║  Ready to start Sprint 2 — MQTT Communication Layer   ║');
-  } else {
-    console.log(`║  Results: ${passed} passed   ${failed} failed   ${total} total          ║`);
-    console.log('║  ❌ Fix failed tests before moving to Sprint 2        ║');
-  }
-
-  console.log('╚═══════════════════════════════════════════════════════╝');
-  console.log('');
-
+  
   process.exit(failed > 0 ? 1 : 0);
 }
 
 // ── Run ─────────────────────────────────────────────────────
 runAllTests().catch((err) => {
-  console.error('\n❌ Fatal error:', err.message);
+  console.error('\nFatal error:', err.message);
   console.error('Check your .env file and serviceAccountKey.json');
   process.exit(1);
 });

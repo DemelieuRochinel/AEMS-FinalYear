@@ -3,9 +3,7 @@ const { getReadingsByDate, calculateCostFcfa } = require('./readingsService');
 
 const reportsRef = (businessId) => db.ref(`monthly_reports/${businessId}`);
 
-// ───────────────────────────────────────────────────────────
 //  GENERATE — Build complete monthly report
-// ───────────────────────────────────────────────────────────
 const generateMonthlyReport = async (businessId, year, month) => {
   try {
     const monthKey  = `${year}_${String(month).padStart(2, '0')}`;
@@ -94,9 +92,7 @@ const generateMonthlyReport = async (businessId, year, month) => {
   }
 };
 
-// ───────────────────────────────────────────────────────────
 //  READ — Get a specific monthly report
-// ───────────────────────────────────────────────────────────
 const getMonthlyReport = async (businessId, year, month) => {
   try {
     const monthKey = `${year}_${String(month).padStart(2, '0')}`;
@@ -112,9 +108,7 @@ const getMonthlyReport = async (businessId, year, month) => {
   }
 };
 
-// ───────────────────────────────────────────────────────────
 //  READ — Get all reports for a business (report history)
-// ───────────────────────────────────────────────────────────
 const getAllReports = async (businessId) => {
   try {
     const snapshot = await reportsRef(businessId).once('value');
