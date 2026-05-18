@@ -51,7 +51,7 @@ const initialize = (io) => {
     password:             process.env.MQTT_PASSWORD || undefined,
   });
 
-  // ── Connection events ─────────────────────────────────────
+  // connection events 
   client.on('connect', _onConnect);
   client.on('message', _onMessage);
   client.on('error',   _onError);
@@ -61,7 +61,7 @@ const initialize = (io) => {
     console.log('MQTT reconnecting...');
   });
 
-  // ── Start offline device detector ─────────────────────────
+  // tart offline device detector
   _startOfflineDetector();
 
   return client;
@@ -332,7 +332,7 @@ const getClient      = ()  => client;
 const getIsConnected = ()  => isConnected;
 const getHeartbeats  = ()  => deviceHeartbeats;
 
-// ── Error and close handlers ────────────────────────────────
+// Error and close handlers 
 const _onError = (err) => {
   console.error('MQTT error:', err.message);
   isConnected = false;

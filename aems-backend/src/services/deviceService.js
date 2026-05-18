@@ -101,9 +101,7 @@ const markDeviceOffline = async (deviceId) => {
   }
 };
 
-// ───────────────────────────────────────────────────────────
 //  UPDATE — Update firmware version after OTA update
-// ───────────────────────────────────────────────────────────
 const updateFirmwareVersion = async (deviceId, version) => {
   try {
     await devicesRef.child(deviceId).update({

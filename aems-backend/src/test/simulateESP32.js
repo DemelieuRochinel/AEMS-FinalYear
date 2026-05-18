@@ -1,8 +1,7 @@
-// ═══════════════════════════════════════════════════════════
 //  ESP32 SIMULATOR
 //  Simulates real ESP32 hardware sending sensor data
 //  Used for backend development without physical hardware
-//
+
 //  Simulates:
 //  → PZEM-004T energy meter readings
 //  → PIR motion sensor occupancy changes
@@ -11,8 +10,6 @@
 //  → Voltage fluctuations (Cameroon ENEO reality)
 //
 //  Run: node src/test/simulateESP32.js
-//  Stop: Ctrl+C
-// ═══════════════════════════════════════════════════════════
 
 const mqtt = require('mqtt');
 require('dotenv').config();
@@ -124,7 +121,7 @@ const simulateOccupancyChanges = () => {
       }
 
       const status = state.rooms[roomId].occupied ? 'OCCUPIED' : 'EMPTY';
-      console.log(`    🚶 ${room.name} → ${status}`);
+      console.log(`\${room.name} → ${status}`);
     }
   }
 };
@@ -159,20 +156,7 @@ const buildReading = () => {
   };
 };
 
-// ═══════════════════════════════════════════════════════════
 //  MAIN — Connect and start publishing
-// ═══════════════════════════════════════════════════════════
-// console.log('');
-// console.log('╔═══════════════════════════════════════════════════╗');
-// console.log('║         AEMS — ESP32 Simulator                   ║');
-// console.log(`║  Device:   ${CONFIG.deviceId}              ║`);
-// console.log(`║  Business: ${CONFIG.businessId}         ║`);
-// console.log(`║  Interval: every ${CONFIG.intervalMs/1000} seconds                ║`);
-// console.log(`║  Broker:   ${CONFIG.brokerUrl}           ║`);
-// console.log('║  Press Ctrl+C to stop                            ║');
-// console.log('╚═══════════════════════════════════════════════════╝');
-// console.log('');
-
 const client = mqtt.connect(CONFIG.brokerUrl, {
   clientId: CONFIG.clientId,
   clean:    true,

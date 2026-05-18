@@ -4,9 +4,9 @@ const bcrypt = require('bcryptjs');
 const usersRef = db.ref('users');
 
 const ROLES = {
-  OWNER:      'owner',
-  STAFF:      'staff',
-  TECHNICIAN: 'technician',
+  OWNER:      'BusinessOwner',
+  STAFF:      'Staff',
+  TECHNICIAN: 'Technician',
 };
 
 
@@ -20,8 +20,7 @@ const createUser = async (userId, data) => {
       email:         data.email.toLowerCase().trim(),
       phone:         data.phone      || null,
       password_hash: hashedPassword,
-      role:          data.role       || ROLES.STAFF,
-      // staff/owner have one business, technician has many
+      role:          data.role       || ROLES.STAFF,  // staff/owner have one business, technician has many
       business_id:   data.business_id || null,
       business_ids:  data.business_ids|| [],
       language:      data.language    || 'eng',
@@ -148,8 +147,7 @@ const authenticateUser = async (email, password) => {
     console.error('❌ authenticateUser error:', error.message);
     throw new Error(`Authentication failed: ${error.message}`);
   }
-};
-
+}; 
 module.exports = {
   ROLES,
   createUser,

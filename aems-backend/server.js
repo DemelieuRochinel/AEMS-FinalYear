@@ -4,6 +4,7 @@ const socketIo  = require('socket.io');
 const cors      = require('cors');
 require('dotenv').config();
 
+
 //Initialize Firebase first (before anything else)
 const db = require('./src/config/firebase');
 
@@ -40,6 +41,23 @@ app.get('/api/health', (req, res) => {
     mqtt_connected: mqttService.getIsConnected(),
   });
 });
+
+// Import all route files
+
+const authenticationRoutes  = require('./src/routes/authenticationRouts');
+const readingsRoutes = require('./src/routes/readingsRoutes');
+const roomsRoutes    = require('./src/routes/roomsRoutes');
+const alertsRoutes   = require('./src/routes/alertsRoutes');
+const billRoutes     = require('./src/routes/billRoutes');
+
+
+// Register routes with base paths
+app.use('/api/auth',     authenticationRoutes);
+app.use('/api/readings', readingsRoutes);
+app.use('/api/rooms',    roomsRoutes);
+app.use('/api/alerts',   alertsRoutes);
+app.use('/api/bill',     billRoutes);
+
 
 //404 handler
 app.use((req, res) => {
@@ -81,7 +99,7 @@ const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
 
-  // ── Initialize MQTT AFTER server starts ──────────────────
+  //Initialize MQTT AFTER server starts
   mqttService.initialize(io);
 });
 
