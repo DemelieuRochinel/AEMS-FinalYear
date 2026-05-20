@@ -85,7 +85,8 @@ const getAllBusinesses = async () => {
 
   } catch (error) {
     console.error('getAllBusinesses error:', error.message);
-    throw new Error(`Failed to get businesses: ${error.message}`);
+    // throw new Error(`Failed to get businesses: ${error.message}`);
+    return [];
   }
 };
 
@@ -108,7 +109,7 @@ const updateBusiness = async (businessId, updates) => {
     return { success: true, businessId, updated: updateData };
 
   } catch (error) {
-    console.error('❌ updateBusiness error:', error.message);
+    console.error('updateBusiness error:', error.message);
     throw new Error(`Failed to update business: ${error.message}`);
   }
 };

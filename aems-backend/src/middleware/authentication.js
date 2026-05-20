@@ -1,4 +1,3 @@
-
 //  Verifies JWT token on every protected API route
 
 //  Usage in routes:

@@ -334,15 +334,25 @@ const getHeartbeats  = ()  => deviceHeartbeats;
 
 // Error and close handlers 
 const _onError = (err) => {
+  if(process.exiting) return;
   console.error('MQTT error:', err.message);
   isConnected = false;
 };
 
 const _onClose = () => {
+  if (process.exiting) return;
   console.log('MQTT connection closed');
   isConnected = false;
 };
-
+// Add a clean disconnect method for testing teardowns
+const disconnect = () => {
+  if (client) {
+    client.end(true, () => {
+      isConnected = false;
+      console.log('MQTT Client disconnected cleanly.');
+    });
+  }
+};
 module.exports = {
   TOPICS,
   initialize,
@@ -350,4 +360,5 @@ module.exports = {
   getClient,
   getIsConnected,
   getHeartbeats,
+  disconnect
 };

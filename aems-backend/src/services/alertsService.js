@@ -1,4 +1,5 @@
 const db = require('../config/firebase');
+const { param } = require('../routes/authenticationRouts');
 
 const alertsRef = (businessId) => db.ref(`alerts/${businessId}`);
 
@@ -70,17 +71,20 @@ const getActiveAlerts = async (businessId) => {
       new Date(b.timestamp) - new Date(a.timestamp)
     );
 
-  } catch (error) {e
+  } catch (error) {
     console.error('getActiveAlerts error:', error.message);
-    throw new Error(`Failed to get active alerts: ${error.message}`);
+    return [];
   }
 };
 
 
 const getAlertHistory = async (businessId, limit = 50) => {
   try {
+    // Strictly validate limit — Firebase requires positive integer
+    const safeLimit = Math.max(1, Math.abs(Math.floor(Number(limit) || 50)));
+
     const snapshot = await alertsRef(businessId)
-      .limitToLast(limit)
+      .limitToLast(safeLimit)
       .once('value');
 
     if (!snapshot.exists()) return [];
@@ -95,8 +99,8 @@ const getAlertHistory = async (businessId, limit = 50) => {
     );
 
   } catch (error) {
-    console.error('getAlertHistory error:', error.message);
-    throw new Error(`Failed to get alert history: ${error.message}`);
+    console.error(' getAlertHistory error:', error.message);
+    return [];
   }
 };
 

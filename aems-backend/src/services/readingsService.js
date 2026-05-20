@@ -1,4 +1,13 @@
 const db = require('../config/firebase');
+const { checkout } = require('../routes/authenticationRouts');
+
+
+// ── Safe limitToLast — Firebase requires positive integer ───
+const safeLimitToLast = (ref, count) => {
+  const safe = Math.max(1, Math.abs(Math.floor(Number(count) || 1)));
+  return ref.limitToLast(safe);
+};
+
 
 const getDatePath = (date = new Date()) => {
   const y = date.getFullYear();
@@ -68,7 +77,7 @@ const getLatestReading = async (businessId) => {
 
   } catch (error) {
     console.error('getLatestReading error:', error.message);
-    throw new Error(`Failed to get latest reading: ${error.message}`);
+    return null;
   }
 };
 
@@ -88,7 +97,7 @@ const getTodayReadings = async (businessId) => {
 
   } catch (error) {
     console.error('getTodayReadings error:', error.message);
-    throw new Error(`Failed to get today readings: ${error.message}`);
+    return [];
   }
 };
 
@@ -108,7 +117,7 @@ const getReadingsByDate = async (businessId, year, month, day) => {
 
   } catch (error) {
     console.error('getReadingsByDate error:', error.message);
-    throw new Error(`Failed to get readings by date: ${error.message}`);
+    return [];
   }
 };
 
@@ -119,7 +128,7 @@ const getDailySummary = async (businessId, year, month, day) => {
 
     if (readings.length === 0) {
       return {
-        date:          `${year}-${month}-${day}`,
+        date:          `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`,
         total_readings: 0,
         max_power_w:   0,
         avg_voltage:   0,
@@ -130,31 +139,40 @@ const getDailySummary = async (businessId, year, month, day) => {
 
     // Calculate summary statistics
     const voltages  = readings.map(r => r.main.voltage).filter(v => v > 0);
-    const powers    = readings.map(r => r.main.power);
-    const maxKwh    = Math.max(...readings.map(r => r.main.energy_kwh));
-    const avgV      = voltages.reduce((a, b) => a + b, 0) / voltages.length;
+    const powers    = readings.map(r => r.main.power).filter(p => p >= 0);
+    const maxKwh    = Math.max(...readings.map(r => r.main.energy_kwh || 0));
+    const avgV      = voltages.length > 0 ? voltages.reduce((a, b) => a + b, 0) / voltages.length : 0;
 
     return {
-      date:           `${year}-${month}-${day}`,
+      date:           `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`,
       total_readings: readings.length,
-      max_power_w:    Math.max(...powers),
+      max_power_w:    powers.length> 0 ? Math.max(...powers) : 0,
       avg_voltage:    Math.round(avgV * 10) / 10,
       max_kwh:        maxKwh,
       cost_fcfa:      calculateCostFcfa(maxKwh),
     };
 
   } catch (error) {
-    console.error('❌ getDailySummary error:', error.message);
-    throw new Error(`Failed to get daily summary: ${error.message}`);
+    console.error('getDailySummary error:', error.message);
+    return {
+      date: `${year}-${month}-${day}`,
+      total_readings: 0,
+      max_power_w:    0,
+      avg_voltage:    0,
+      max_kwh:        0,
+      cost_fcfa:      0,
+      
+    };
+
+    // throw new Error(`Failed to get daily summary: ${error.message}`);
+
   }
 };
 
-// ───────────────────────────────────────────────────────────
 //  CALCULATE — ENEO bill in FCFA using tiered tariff
 //  Tier 1: 0–110 kWh   = 50 FCFA/kWh
 //  Tier 2: 111–400 kWh = 79 FCFA/kWh
 //  Tier 3: 400+ kWh    = 94 FCFA/kWh
-// ───────────────────────────────────────────────────────────
 const calculateCostFcfa = (kwh) => {
   if (kwh <= 0)   return 0;
   if (kwh <= 110) return Math.round(kwh * 50);
@@ -167,19 +185,47 @@ const calculateCostFcfa = (kwh) => {
   return Math.round(tier1 + tier2 + (kwh - 400) * 94);
 };
 
-// ───────────────────────────────────────────────────────────
 //  LISTEN — Real-time listener for latest reading
 //  Used by WebSocket to push live data to dashboard
-// ───────────────────────────────────────────────────────────
-const listenToLatestReading = (businessId, callback) => {
-  const datePath = getDatePath();
+// const listenToLatestReading = (businessId, callback) => {
 
-  readingsRef(businessId, datePath)
-    .limitToLast(1)
-    .on('child_added', (snapshot) => {
-      callback({ id: snapshot.key, ...snapshot.val() });
+//   try {
+//   const datePath = getDatePath();
+
+
+//   readingsRef(businessId, datePath)
+//     .limitToLast(1)
+//     .on('child_added', (snapshot) => {
+//       if(snapshot.exists()) {
+//       callback({ id: snapshot.key, ...snapshot.val() });
+//       }
+//     });
+// } catch(error){
+//   console.error(`listenTolatestReading Error:`, error.message);
+// }
+
+// };
+
+const listenToLatestReading = (businessId, callback) => {
+  try {
+    const datePath = getDatePath();
+    const ref = readingsRef(businessId, datePath);
+
+    // Use once() instead of on() to avoid persistent listener memory leaks
+    // The caller is responsible for polling if they need continuous updates
+    ref.limitToLast(1).once('value', (snapshot) => {
+      if (!snapshot.exists()) return;
+      snapshot.forEach((child) => {
+        callback({ id: child.key, ...child.val() });
+      });
     });
+
+  } catch (error) {
+    console.error('listenToLatestReading error:', error.message);
+  }
 };
+
+
 
 const stopListeningToReadings = (businessId) => {
   const datePath = getDatePath();

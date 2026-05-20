@@ -8,8 +8,11 @@ require('dotenv').config();
 //Initialize Firebase first (before anything else)
 const db = require('./src/config/firebase');
 
-//Import MQTT service 
+//Import MQTT and the Automated Engine of the system in the  service 
 const mqttService = require('./src/services/mqttService');
+const automationEngine = require('./src/services/automationEngine');
+
+
 
 //Create Express app and HTTP server
 const app    = express();
@@ -39,6 +42,7 @@ app.get('/api/health', (req, res) => {
     timestamp:     new Date().toISOString(),
     uptime_sec:    Math.floor(process.uptime()),
     mqtt_connected: mqttService.getIsConnected(),
+    automation_engine: automationEngine.getStatus(),
   });
 });
 
@@ -101,6 +105,10 @@ server.listen(PORT, () => {
 
   //Initialize MQTT AFTER server starts
   mqttService.initialize(io);
+
+  const automationEngine = require('./src/services/automationEngine');
+  automationEngine.initialize(io);
 });
 
+// Export the server, app and the io to the othere module.
 module.exports = { app, server, io };
