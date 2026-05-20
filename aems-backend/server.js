@@ -11,6 +11,8 @@ const db = require('./src/config/firebase');
 //Import MQTT and the Automated Engine of the system in the  service 
 const mqttService = require('./src/services/mqttService');
 const automationEngine = require('./src/services/automationEngine');
+const schedulerService = require('./src/services/schedulerService');
+const emailService     = require('./src/services/emailService');
 
 
 
@@ -43,6 +45,8 @@ app.get('/api/health', (req, res) => {
     uptime_sec:    Math.floor(process.uptime()),
     mqtt_connected: mqttService.getIsConnected(),
     automation_engine: automationEngine.getStatus(),
+    automation_engine: automationEngine.getStatus(),
+    scheduler:         schedulerService.getStatus(),
   });
 });
 
@@ -108,6 +112,9 @@ server.listen(PORT, () => {
 
   const automationEngine = require('./src/services/automationEngine');
   automationEngine.initialize(io);
+
+  schedulerService.initialize();
+  emailService.verifyConfiguration();
 });
 
 // Export the server, app and the io to the othere module.
