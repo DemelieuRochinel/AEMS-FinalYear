@@ -23,13 +23,27 @@ const server = http.createServer(app);
 //Configure Socket.io (WebSocket)
 const io = socketIo(server, {
   cors: {
-    origin:  process.env.FRONTEND_URL,
-    methods: ['GET', 'POST'],
+    origin: [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      process.env.FRONTEND_URL,
+    ].filter(Boolean),
+    methods:     ['GET', 'POST'],
+    credentials: true,
   },
 });
 
 //Global middleware
-app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    process.env.FRONTEND_URL,
+  ].filter(Boolean),
+  methods:     ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  credentials: true,
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -40,6 +54,7 @@ app.set('io', io);
 app.get('/api/health', (req, res) => {
   res.json({
     status:        'running',
+    projec:         'Automate Enegy management system',
     environment:   process.env.NODE_ENV,
     timestamp:     new Date().toISOString(),
     uptime_sec:    Math.floor(process.uptime()),

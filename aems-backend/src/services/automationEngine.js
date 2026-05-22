@@ -1,5 +1,5 @@
 //  AUTOMATION RULES ENGINE
-//  The intelligence of AEMS — runs every 30 seconds
+//  The intelligence of Automated energy management system this will runs every 30 seconds
 //  Evaluates rules and executes actions automatically
 //
 //  Rules evaluated:

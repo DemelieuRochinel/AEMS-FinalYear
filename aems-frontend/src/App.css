@@ -1,0 +1,73 @@
+/* ═══════════════════════════════════════════════════════════
+   AEMS Global Styles
+   University of Buea — LEKEUGO DEMELIEU ROCHINEL FE22A247
+═══════════════════════════════════════════════════════════ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg-primary:    #0d1b2a;
+  --bg-secondary:  #1a2f45;
+  --bg-card:       #1e3a52;
+  --color-teal:    #1D9E75;
+  --color-teal-light: #E1F5EE;
+  --color-coral:   #D85A30;
+  --color-amber:   #BA7517;
+  --color-purple:  #534AB7;
+  --color-blue:    #185FA5;
+  --text-primary:  #ffffff;
+  --text-secondary:#94a3b8;
+  --text-muted:    #64748b;
+  --border:        rgba(255,255,255,0.08);
+  --shadow:        0 4px 16px rgba(0,0,0,0.3);
+}
+
+body {
+  font-family: 'Arial', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+/* ── Scrollbar styling ──────────────────────────────────── */
+::-webkit-scrollbar       { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb {
+  background:    var(--color-teal);
+  border-radius: 3px;
+}
+
+/* ── Utility classes ────────────────────────────────────── */
+.text-teal   { color: var(--color-teal); }
+.text-coral  { color: var(--color-coral); }
+.text-amber  { color: var(--color-amber); }
+.text-muted  { color: var(--text-muted); }
+
+.card {
+  background:    var(--bg-card);
+  border:        1px solid var(--border);
+  border-radius: 12px;
+  padding:       20px;
+}
+
+.btn {
+  padding:       8px 20px;
+  border:        none;
+  border-radius: 8px;
+  cursor:        pointer;
+  font-size:     14px;
+  font-weight:   bold;
+  transition:    opacity 0.2s;
+}
+.btn:hover   { opacity: 0.85; }
+.btn-primary { background: var(--color-teal);  color: white; }
+.btn-danger  { background: var(--color-coral); color: white; }
+.btn-ghost   {
+  background: transparent;
+  color:      var(--text-secondary);
+  border:     1px solid var(--border);
+}

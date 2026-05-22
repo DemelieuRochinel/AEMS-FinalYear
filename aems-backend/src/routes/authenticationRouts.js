@@ -140,7 +140,7 @@ router.post('/register', async (req, res) => {
 
     const token = generateToken({ ...created.data, id: userId });
 
-    console.log(`👤 New user: ${email} (${role || 'staff'})`);
+    console.log(`New user: ${email} (${role || 'staff'})`);
 
     return res.status(201).json({
       message: 'Account created successfully',

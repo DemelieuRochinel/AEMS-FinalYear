@@ -144,7 +144,7 @@ const authenticateUser = async (email, password) => {
     return safeUser;
 
   } catch (error) {
-    console.error('❌ authenticateUser error:', error.message);
+    console.error('authenticateUser error:', error.message);
     throw new Error(`Authentication failed: ${error.message}`);
   }
 }; 

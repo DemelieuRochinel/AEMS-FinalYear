@@ -237,9 +237,9 @@ async function cleanup() {
   try {
     await db.ref(`businesses/${TEST.businessId}`).remove();
     await db.ref(`alerts/${TEST.businessId}`).remove();
-    console.log('  ✅ Test data removed from Firebase');
+    console.log('Test data removed from Firebase');
   } catch (err) {
-    console.log('  ⚠️  Cleanup warning:', err.message);
+    console.log('Cleanup warning:', err.message);
   }
 }
 
@@ -254,7 +254,7 @@ async function runAllTests() {
   try {
     await setup();
   } catch (err) {
-    console.error('\n❌ Setup failed:', err.message);
+    console.error('\nSetup failed:', err.message);
     process.exit(1);
   }
 
