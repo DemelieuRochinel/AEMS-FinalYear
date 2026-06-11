@@ -1,52 +1,119 @@
-//  AUTH CONTEXT
-//  Global authentication state — available everywhere in app
+// AUTH CONTEXT
+// Global authentication state — available everywhere in app
 
-import { createContext,useState, useEffect } from 'react';
+import { createContext, useState, useEffect, useContext } from 'react';
 import api from '../api/axiosConfig';
 
 export const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user,    setUser]    = useState(null);
+  const [user, setUser] = useState(null);
+  const [business, setBusiness] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ── Load user from localStorage on app start ─────────────
-  useEffect(() => {
-    const savedUser  = localStorage.getItem('aems_user');
-    const savedToken = localStorage.getItem('aems_token');
+  // Fetch business profile
+  const fetchBusiness = async () => {
+    try {
+      const res = await api.get('/api/business/profile');
 
-setTimeout(() => {
-      if (savedUser && savedToken) {
-        setUser(JSON.parse(savedUser));
+      if (res.data?.business) {
+        setBusiness(res.data.business);
       }
+    } catch (error) {
+      console.error('Failed to fetch business profile:', error);
+    } finally {
       setLoading(false);
-    }, 0);
+    }
+  };
+
+  // Restore auth state on page refresh
+  useEffect(() => {
+    const initializeAuth = async () => {
+      try {
+        const savedUser = localStorage.getItem('aems_user');
+        const savedToken = localStorage.getItem('aems_token');
+
+        if (savedUser && savedToken) {
+          const parsedUser = JSON.parse(savedUser);
+
+          setUser(parsedUser);
+
+          // Load associated business
+          await fetchBusiness();
+        } else {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Error restoring auth state:', error);
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
   }, []);
-  
-  // ── Login
+
+  // Login
   const login = async (email, password) => {
-    const response = await api.post('/api/auth/login', { email, password });
+    const response = await api.post('/api/auth/login', {
+      email,
+      password,
+    });
+
     const { token, user: userData } = response.data;
 
     localStorage.setItem('aems_token', token);
-    localStorage.setItem('aems_user',  JSON.stringify(userData));
+    localStorage.setItem('aems_user', JSON.stringify(userData));
+
     setUser(userData);
+
+    // Load business after successful login
+    await fetchBusiness();
 
     return userData;
   };
 
-  // ── Logout
+  // Logout
   const logout = () => {
     localStorage.removeItem('aems_token');
     localStorage.removeItem('aems_user');
+
     setUser(null);
+    setBusiness(null);
+  };
+
+  // Update business locally
+  const updateBusiness = (updates) => {
+    setBusiness((prev) =>
+      prev ? { ...prev, ...updates } : prev
+    );
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        business,
+        loading,
+        login,
+        logout,
+        fetchBusiness,
+        updateBusiness,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
 
+// Custom Hook
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
 
+  if (!ctx) {
+    throw new Error(
+      'useAuth must be used inside AuthProvider'
+    );
+  }
+
+  return ctx;
+};

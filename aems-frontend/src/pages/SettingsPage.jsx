@@ -1,271 +1,594 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import jsPDF from 'jspdf';
 import api from '../api/axiosConfig';
 
-const FieldRow = ({ label, value, unit, hint }) => (
+const Field = ({ label, value, hint, editMode, name, onChange, type = 'text' }) => (
   <div style={{
-    display:       'flex',
-    justifyContent:'space-between',
-    alignItems:    'center',
-    padding:       '14px 0',
-    borderBottom:  '1px solid rgba(255,255,255,0.05)',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '14px 0', borderBottom: '1px solid var(--border)',
   }}>
     <div>
-      <div style={{ fontSize: '14px', color: '#e2e8f0' }}>{label}</div>
-      {hint && <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{hint}</div>}
+      <div style={{ fontSize: '13px', color: 'var(--text-1)' }}>{label}</div>
+      {hint && <div style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '2px' }}>{hint}</div>}
     </div>
-    <div style={{
-      fontSize:   '14px',
-      fontWeight: 'bold',
-      color:      '#1D9E75',
-    }}>
-      {value}{unit && <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '4px' }}>{unit}</span>}
-    </div>
+    {editMode ? (
+      <input
+        type={type}
+        name={name}
+        defaultValue={value}
+        onChange={onChange}
+        className="form-input"
+        style={{ width: '180px', fontSize: '13px', padding: '6px 10px' }}
+      />
+    ) : (
+      <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--teal)' }}>
+        {value || '--'}
+      </div>
+    )}
   </div>
 );
 
 export default function SettingsPage() {
-  const { user } = useAuth();
-  const [business, setBusiness] = useState(null);
-  const [loading,  setLoading]  = useState(true);
-  const [saved,    setSaved]    = useState(false);
+  const { user, business, updateBusiness } = useAuth();
 
-  const [settings, setSettings] = useState({
+  const [editProfile,  setEditProfile]  = useState(false);
+  const [editSettings, setEditSettings] = useState(false);
+  const [profileData,  setProfileData]  = useState({});
+  const [settings,     setSettings]     = useState({
     daily_kwh_limit:     50,
     voltage_min:         190,
     voltage_max:         245,
-    auto_shutdown_delay: 15,
+    auto_shutdown_delay: 15, // the auto-shoutdown will take 15 min after the detecting that nobody is in the room
     closing_time:        '18:30',
   });
+  const [saving,   setSaving]   = useState(false);
+  const [saveMsg,  setSaveMsg]  = useState('');
+  const [predBill, setPredBill] = useState(null);
 
   useEffect(() => {
-    api.get('/api/readings/live')
-      .catch(() => null)
-      .finally(() => setLoading(false));
-  }, []);
+    if (business?.settings) {
+      setSettings(prev => ({ ...prev, ...business.settings }));
+    }
 
-  const handleSave = async () => {
+    // Fetch bil prediction
+    api.get('/api/bill/estimate').then(r => {
+      setPredBill(r.data);
+    }).catch(() => {});
+  }, [business]);
+
+  const saveProfile = async () => {
+    setSaving(true);
     try {
-      setSaved(false);
-      // In production this would call PATCH /api/business/settings
-      // For now we show success to demonstrate the UI
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      const res = await api.patch('/api/business/profile', profileData);
+      updateBusiness(res.data.business);
+      setEditProfile(false);
+      setSaveMsg('Profile updated successfully');
+      setTimeout(() => setSaveMsg(''), 3000);
     } catch (err) {
-      console.error('Save settings error:', err.message);
+      setSaveMsg('Save failed: ' + err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const inputStyle = {
-    width:        '120px',
-    padding:      '6px 10px',
-    background:   'rgba(255,255,255,0.05)',
-    border:       '1px solid rgba(255,255,255,0.1)',
-    borderRadius: '6px',
-    color:        '#ffffff',
-    fontSize:     '13px',
-    textAlign:    'right',
+  const saveSettings = async () => {
+    setSaving(true);
+    try {
+      await api.patch('/api/business/settings', settings);
+      updateBusiness({ settings });
+      setEditSettings(false);
+      setSaveMsg('Settings saved successfully');
+      setTimeout(() => setSaveMsg(''), 3000);
+    } catch (err) {
+      setSaveMsg('Save failed: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
   };
+
+  // Download bill as pdf
+  const downloadBill = () => {
+  if (!predBill) return;
+
+  const doc = new jsPDF();
+
+  // Header
+  doc.setFontSize(20);
+  doc.text('AEMS ENERGY BILL REPORT', 20, 20);
+
+  doc.setFontSize(10);
+  doc.text('Automated Energy Management System', 20, 28);
+
+  // Business Details
+  doc.setFontSize(12);
+  doc.text(`Business: ${business?.name || 'N/A'}`, 20, 45);
+  doc.text(`Owner: ${business?.owner_name || user?.name || 'N/A'}`, 20, 53);
+  doc.text(`Period: ${predBill.period}`, 20, 61);
+
+  // Bill Summary
+  doc.setFontSize(14);
+  doc.text('Consumption Summary', 20, 80);
+
+  doc.setFontSize(11);
+
+  doc.text(
+    `Current Consumption: ${predBill.current_kwh} kWh`,
+    25,
+    92
+  );
+
+  doc.text(
+    `Current Cost: ${predBill.current_cost_fcfa?.toLocaleString()} FCFA`,
+    25,
+    102
+  );
+
+  doc.text(
+    `Projected Consumption: ${predBill.projected_kwh?.toFixed(1)} kWh`,
+    25,
+    112
+  );
+
+  doc.text(
+    `Projected Bill: ${predBill.projected_cost_fcfa?.toLocaleString()} FCFA`,
+    25,
+    122
+  );
+
+  doc.text(
+    `Days Passed: ${predBill.days_passed}`,
+    25,
+    132
+  );
+
+  doc.text(
+    `Days Remaining: ${predBill.days_remaining}`,
+    25,
+    142
+  );
+
+  // ENEO Tariff
+  doc.setFontSize(14);
+  doc.text('ENEO Tariff Structure', 20, 165);
+
+  doc.setFontSize(11);
+
+  doc.text('Tier 1 (0 - 110 kWh): 50 FCFA/kWh', 25, 177);
+  doc.text('Tier 2 (111 - 400 kWh): 79 FCFA/kWh', 25, 187);
+  doc.text('Tier 3 (400+ kWh): 94 FCFA/kWh', 25, 197);
+
+  // Next Month Prediction
+  const nextMonthBill = Math.round(
+    (predBill.projected_cost_fcfa || 0) * 1.05
+  );
+
+  doc.setFontSize(14);
+  doc.text('Predicted Next Month Bill', 20, 220);
+
+  doc.setFontSize(16);
+  doc.text(
+    `${nextMonthBill.toLocaleString()} FCFA`,
+    25,
+    232
+  );
+
+  // Footer
+  doc.setFontSize(9);
+
+  doc.text(
+    `Generated on ${new Date().toLocaleString()}`,
+    20,
+    270
+  );
+
+  doc.text(
+    'Generated by AEMS - Automated Energy Management System',
+    20,
+    278
+  );
+
+  doc.save(
+    `AEMS_Bill_${predBill.period?.replace(/\s+/g, '_')}.pdf`
+  );
+};
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '22px', fontWeight: 'bold' }}>Settings</h1>
-        <p style={{ color: '#64748b', fontSize: '14px', marginTop: '4px' }}>
-          Configure your AEMS system for your business
-        </p>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Settings</h1>
+          <p className="page-sub">Configure your AEMS system</p>
+        </div>
       </div>
 
-      <div style={{
-        display:             'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap:                 '20px',
-      }}>
+      {saveMsg && (
+        <div style={{
+          padding: '10px 16px', borderRadius: 'var(--r-md)',
+          background: saveMsg.includes('failed') ? 'rgba(216,90,48,0.1)' : 'rgba(29,158,117,0.1)',
+          border: `1px solid ${saveMsg.includes('failed') ? 'var(--coral)' : 'var(--teal)'}`,
+          color: saveMsg.includes('failed') ? 'var(--coral)' : 'var(--teal)',
+          fontSize: '13px', marginBottom: '20px',
+        }}>
+          {saveMsg}
+        </div>
+      )}
+
+      <div className="grid-2" style={{ marginBottom: '20px' }}>
 
         {/* Account information */}
-        <div style={{
-          background:   '#1e3a52',
-          border:       '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '12px',
-          padding:      '24px',
-        }}>
-          <h3 style={{ fontSize: '15px', marginBottom: '20px',
-                       color: '#1D9E75' }}>
-            Account Information
-          </h3>
-          <FieldRow label="Full name"   value={user?.name     || '--'} />
-          <FieldRow label="Email"       value={user?.email    || '--'} />
-          <FieldRow label="Role"        value={user?.role     || '--'} />
-          <FieldRow label="Business ID" value={user?.businessId || '--'} />
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--teal)' }}>
+              Account Information
+            </h3>
+            <button
+              onClick={() => editProfile ? saveProfile() : setEditProfile(true)}
+              className="btn"
+              style={{
+                padding: '6px 14px', fontSize: '12px',
+                background: editProfile ? 'var(--teal)' : 'transparent',
+                border: editProfile ? 'none' : '1px solid var(--border-md)',
+                color: editProfile ? '#fff' : 'var(--text-2)',
+              }}
+            >
+              {saving ? 'Saving...' : editProfile ? '✓ Save' : '✏️ Edit'}
+            </button>
+          </div>
+
+          <Field label="Full name"    value={user?.name || business?.owner_name}
+            editMode={editProfile} name="owner_name"
+            onChange={e => setProfileData(p => ({ ...p, owner_name: e.target.value }))} />
+          <Field label="Email"        value={user?.email || business?.owner_email}
+            editMode={false} />
+          <Field label="Phone"        value={business?.owner_phone}
+            editMode={editProfile} name="owner_phone"
+            onChange={e => setProfileData(p => ({ ...p, owner_phone: e.target.value }))} />
+          <Field label="Business name" value={business?.name}
+            editMode={editProfile} name="name"
+            onChange={e => setProfileData(p => ({ ...p, name: e.target.value }))} />
+          <Field label="Location"     value={business?.location}
+            editMode={editProfile} name="location"
+            onChange={e => setProfileData(p => ({ ...p, location: e.target.value }))} />
+          <Field label="Role"         value={user?.role} editMode={false} />
+
+          {editProfile && (
+            <button
+              onClick={() => setEditProfile(false)}
+              className="btn btn-ghost"
+              style={{ width: '100%', marginTop: '12px', fontSize: '12px' }}
+            >
+              Cancel
+            </button>
+          )}
         </div>
 
-        {/* System settings */}
-        <div style={{
-          background:   '#1e3a52',
-          border:       '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '12px',
-          padding:      '24px',
-        }}>
-          <h3 style={{ fontSize: '15px', marginBottom: '20px',
-                       color: '#1D9E75' }}>
-            Energy Thresholds
-          </h3>
+        {/* Energy settings */}
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--teal)' }}>
+              Energy Thresholds
+            </h3>
+            <button
+              onClick={() => editSettings ? saveSettings() : setEditSettings(true)}
+              className="btn"
+              style={{
+                padding: '6px 14px', fontSize: '12px',
+                background: editSettings ? 'var(--teal)' : 'transparent',
+                border: editSettings ? 'none' : '1px solid var(--border-md)',
+                color: editSettings ? '#fff' : 'var(--text-2)',
+              }}
+            >
+              {saving ? 'Saving...' : editSettings ? '✓ Save' : '✏️ Edit'}
+            </button>
+          </div>
 
           {[
-            {
-              key:   'daily_kwh_limit',
-              label: 'Daily kWh limit',
-              unit:  'kWh',
-              hint:  'Alert when this is exceeded',
-              min:   1, max: 500,
-            },
-            {
-              key:   'voltage_min',
-              label: 'Minimum voltage',
-              unit:  'V',
-              hint:  'Alert when voltage drops below this',
-              min:   150, max: 220,
-            },
-            {
-              key:   'voltage_max',
-              label: 'Maximum voltage',
-              unit:  'V',
-              hint:  'Alert when voltage exceeds this',
-              min:   220, max: 280,
-            },
-            {
-              key:   'auto_shutdown_delay',
-              label: 'Auto-shutdown delay',
-              unit:  'min',
-              hint:  'Minutes empty before auto-shutdown',
-              min:   1, max: 60,
-            },
+            { key: 'daily_kwh_limit',     label: 'Daily kWh limit',      unit: 'kWh', hint: 'Alert when exceeded',                  min: 1,   max: 500 },
+            { key: 'voltage_min',          label: 'Min voltage',          unit: 'V',   hint: 'Alert below this voltage',            min: 150, max: 220 },
+            { key: 'voltage_max',          label: 'Max voltage',          unit: 'V',   hint: 'Alert above this voltage',            min: 220, max: 280 },
+            { key: 'auto_shutdown_delay',  label: 'Auto-shutdown delay',  unit: 'min', hint: 'Minutes empty before auto-shutdown',  min: 1,   max: 120 },
           ].map(({ key, label, unit, hint, min, max }) => (
             <div key={key} style={{
-              display:       'flex',
-              justifyContent:'space-between',
-              alignItems:    'center',
-              padding:       '12px 0',
-              borderBottom:  '1px solid rgba(255,255,255,0.05)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '12px 0', borderBottom: '1px solid var(--border)',
             }}>
               <div>
-                <div style={{ fontSize: '13px', color: '#e2e8f0' }}>{label}</div>
-                <div style={{ fontSize: '11px', color: '#64748b' }}>{hint}</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-1)' }}>{label}</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-3)' }}>{hint}</div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <input
-                  type="number"
-                  value={settings[key]}
-                  min={min}
-                  max={max}
-                  onChange={e => setSettings(prev => ({
-                    ...prev,
-                    [key]: parseFloat(e.target.value),
-                  }))}
-                  style={inputStyle}
-                />
-                <span style={{ fontSize: '12px', color: '#64748b' }}>{unit}</span>
-              </div>
+              {editSettings ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <input
+                    type="number" min={min} max={max}
+                    value={settings[key]}
+                    onChange={e => setSettings(p => ({ ...p, [key]: parseFloat(e.target.value) }))}
+                    className="form-input"
+                    style={{ width: '80px', textAlign: 'right', fontSize: '13px', padding: '6px 8px' }}
+                  />
+                  <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>{unit}</span>
+                </div>
+              ) : (
+                <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--teal)' }}>
+                  {settings[key]} <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>{unit}</span>
+                </span>
+              )}
             </div>
           ))}
 
           {/* Closing time */}
           <div style={{
-            display:       'flex',
-            justifyContent:'space-between',
-            alignItems:    'center',
-            padding:       '12px 0',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '12px 0', borderBottom: '1px solid var(--border)',
           }}>
             <div>
-              <div style={{ fontSize: '13px', color: '#e2e8f0' }}>
-                Business closing time
-              </div>
-              <div style={{ fontSize: '11px', color: '#64748b' }}>
-                After-hours shutdown trigger
-              </div>
+              <div style={{ fontSize: '13px', color: 'var(--text-1)' }}>Closing time</div>
+              <div style={{ fontSize: '10px', color: 'var(--text-3)' }}>After-hours shutdown trigger</div>
             </div>
-            <input
-              type="time"
-              value={settings.closing_time}
-              onChange={e => setSettings(prev => ({
-                ...prev, closing_time: e.target.value
-              }))}
-              style={inputStyle}
-            />
+            {editSettings ? (
+              <input
+                type="time" value={settings.closing_time}
+                onChange={e => setSettings(p => ({ ...p, closing_time: e.target.value }))}
+                className="form-input"
+                style={{ width: '100px', fontSize: '13px', padding: '6px 8px' }}
+              />
+            ) : (
+              <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--teal)' }}>
+                {settings.closing_time}
+              </span>
+            )}
           </div>
 
-          <button
-            onClick={handleSave}
-            style={{
-              marginTop:    '20px',
-              width:        '100%',
-              padding:      '10px',
-              background:   saved ? '#0F6E56' : '#1D9E75',
-              border:       'none',
-              borderRadius: '8px',
-              color:        '#fff',
-              fontSize:     '14px',
-              fontWeight:   'bold',
-              cursor:       'pointer',
-              transition:   'background 0.3s',
-            }}
-          >
-            {saved ? '✓ Saved successfully' : 'Save Settings'}
-          </button>
+          {editSettings && (
+            <button
+              onClick={() => setEditSettings(false)}
+              className="btn btn-ghost"
+              style={{ width: '100%', marginTop: '12px', fontSize: '12px' }}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Bill prediction + download */}
+      <div className="grid-2" style={{ marginBottom: '20px' }}>
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--teal)' }}>
+              Bill Prediction
+            </h3>
+            <button onClick={downloadBill} className="btn btn-ghost"
+              style={{ fontSize: '12px', padding: '6px 14px' }}>
+              ⬇ Download CSV
+            </button>
+          </div>
+
+          {predBill ? (
+            <>
+              {[
+                { label: 'Period',              value: predBill.period,                                     color: 'var(--text-1)'   },
+                { label: 'Current consumption', value: `${predBill.current_kwh} kWh`,                       color: 'var(--text-1)'   },
+                { label: 'Current cost',        value: `${predBill.current_cost_fcfa?.toLocaleString()} FCFA`, color: 'var(--amber)'  },
+                { label: 'Projected full month',value: `${predBill.projected_kwh?.toFixed(1)} kWh`,          color: 'var(--text-1)'   },
+                { label: 'Projected bill',      value: `${predBill.projected_cost_fcfa?.toLocaleString()} FCFA`, color: 'var(--coral)' },
+                { label: 'Days remaining',      value: predBill.days_remaining,                              color: 'var(--text-1)'   },
+              ].map(r => (
+                <div key={r.label} style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  padding: '10px 0', borderBottom: '1px solid var(--border)',
+                }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-3)' }}>{r.label}</span>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: r.color }}>{r.value}</span>
+                </div>
+              ))}
+
+              {/* Next month prediction */}
+              <div style={{
+                marginTop: '14px', padding: '14px',
+                background: 'rgba(29,158,117,0.07)',
+                borderRadius: 'var(--r-md)',
+                border: '1px solid rgba(29,158,117,0.2)',
+              }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-3)', marginBottom: '4px' }}>
+                  Predicted next month bill
+                </div>
+                <div style={{ fontSize: '22px', fontWeight: '700', color: 'var(--teal)' }}>
+                  ~{Math.round((predBill.projected_cost_fcfa || 0) * 1.05).toLocaleString()} FCFA
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '4px' }}>
+                  Based on current consumption patterns (+5% growth factor)
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={{ color: 'var(--text-3)', fontSize: '13px', textAlign: 'center', padding: '20px' }}>
+              Loading bill data...
+            </div>
+          )}
         </div>
 
-        {/* AEMS system info */}
-        <div style={{
-          background:   '#1e3a52',
-          border:       '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '12px',
-          padding:      '24px',
-        }}>
-          <h3 style={{ fontSize: '15px', marginBottom: '20px',
-                       color: '#1D9E75' }}>
+        {/* System + ENEO info */}
+        <div className="card">
+          <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--teal)', marginBottom: '16px' }}>
             System Information
           </h3>
-          <FieldRow label="System version"    value="1.0.0" />
-          <FieldRow label="Country"           value="Cameroon" />
-          <FieldRow label="Energy provider"   value="SOCADEL Cameroon" />
-        </div>
+          {[
+            { label: 'System version',   value: '1.0.0'                         },
+            { label: 'Developer',        value: 'LEKEUGO DEMELIEU ROCHINEL'      },
+            { label: 'Energy provider',  value: 'ENEO Cameroon'                  },
+          ].map(r => (
+            <div key={r.label} style={{
+              display: 'flex', justifyContent: 'space-between',
+              padding: '10px 0', borderBottom: '1px solid var(--border)',
+            }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-3)' }}>{r.label}</span>
+              <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-1)' }}>{r.value}</span>
+            </div>
+          ))}
 
-        {/* ENEO tariff info */}
-        <div style={{
-          background:   '#1e3a52',
-          border:       '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '12px',
-          padding:      '24px',
-        }}>
-          <h3 style={{ fontSize: '15px', marginBottom: '20px',
-                       color: '#1D9E75' }}>
-            ENEO Billing Configuration
-          </h3>
-          <FieldRow
-            label="Tier 1 rate"
-            value="50"
-            unit="FCFA/kWh"
-            hint="0 – 110 kWh per month"
-          />
-          <FieldRow
-            label="Tier 2 rate"
-            value="79"
-            unit="FCFA/kWh"
-            hint="111 – 400 kWh per month"
-          />
-          <FieldRow
-            label="Tier 3 rate"
-            value="94"
-            unit="FCFA/kWh"
-            hint="Above 400 kWh per month"
-          />
-          <FieldRow label="Currency"  value="FCFA"    />
-          <FieldRow label="Frequency" value="50"   unit="Hz" hint="Cameroon AC standard" />
-          <FieldRow label="Voltage"   value="220"  unit="V"  hint="Nominal ENEO voltage" />
+          <div style={{ marginTop: '20px' }}>
+            <h4 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--teal)', marginBottom: '12px' }}>
+              ENEO Billing Configuration
+            </h4>
+            {[
+              { label: 'Tier 1', range: '0 - 110 kWh',   rate: '50 FCFA/kWh', color: 'var(--teal)'  },
+              { label: 'Tier 2', range: '111 - 400 kWh', rate: '79 FCFA/kWh', color: 'var(--amber)' },
+              { label: 'Tier 3', range: '400+ kWh',      rate: '94 FCFA/kWh', color: 'var(--coral)' },
+            ].map(t => (
+              <div key={t.label} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '10px 12px', borderRadius: 'var(--r-md)', marginBottom: '6px',
+                background: 'var(--bg-input)', borderLeft: `3px solid ${t.color}`,
+              }}>
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: '600', color: t.color }}>{t.label}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '1px' }}>{t.range}</div>
+                </div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-1)' }}>{t.rate}</div>
+              </div>
+            ))}
+          </div>
         </div>
-
       </div>
+
+      {/* Add Room form */}
+      <AddRoomCard />
     </div>
   );
 }
+
+
+// here is where ae add Rooms for the business created
+function AddRoomCard() {
+  const [open,    setOpen]    = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [msg,     setMsg]     = useState('');
+  const [form,    setForm]    = useState({
+    name: '', relay_id: 'relay_1', device_type: 'lights', auto_shutdown: true,
+  });
+
+  const submit = async () => {
+    if (!form.name || !form.relay_id) { setMsg('Name and relay ID are required'); return; }
+    setSaving(true);
+    try {
+      await api.post('/api/business/rooms', form);
+      setMsg('Room created successfully! Refresh the Rooms page.');
+      setForm({ name: '', relay_id: 'relay_1', device_type: 'lights', auto_shutdown: true });
+      setTimeout(() => setOpen(false), 2000);
+    } catch (err) {
+      setMsg('Failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: open ? '20px' : '0' }}>
+        <div>
+          <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--teal)' }}>
+            Add New Room
+          </h3>
+          <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '3px' }}>
+            Configure a new room for monitoring and automation
+          </p>
+        </div>
+        <button
+          onClick={() => setOpen(!open)}
+          className="btn btn-primary"
+          style={{ fontSize: '12px', padding: '8px 16px' }}
+        >
+          {open ? '✕ Cancel' : '+ Add Room'}
+        </button>
+      </div>
+
+      {open && (
+        <>
+          {msg && (
+            <div style={{
+              padding: '10px 14px', borderRadius: 'var(--r-md)', marginBottom: '16px',
+              background: msg.includes('success') ? 'rgba(29,158,117,0.1)' : 'rgba(216,90,48,0.1)',
+              color: msg.includes('success') ? 'var(--teal)' : 'var(--coral)',
+              border: `1px solid ${msg.includes('success') ? 'var(--teal)' : 'var(--coral)'}`,
+              fontSize: '13px',
+            }}>
+              {msg}
+            </div>
+          )}
+
+          <div className="grid-2">
+            <div>
+              <label style={{ fontSize: '12px', color: 'var(--text-3)', display: 'block', marginBottom: '6px' }}>
+                Room name *
+              </label>
+              <input
+                className="form-input"
+                placeholder="e.g. Main Office"
+                value={form.name}
+                onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: 'var(--text-3)', display: 'block', marginBottom: '6px' }}>
+                Relay ID *
+              </label>
+              <select
+                className="form-input"
+                value={form.relay_id}
+                onChange={e => setForm(p => ({ ...p, relay_id: e.target.value }))}
+              >
+                {['relay_1','relay_2','relay_3','relay_4','relay_5','relay_6','relay_7','relay_8'].map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: 'var(--text-3)', display: 'block', marginBottom: '6px' }}>
+                Device type
+              </label>
+              <select
+                className="form-input"
+                value={form.device_type}
+                onChange={e => setForm(p => ({ ...p, device_type: e.target.value }))}
+              >
+                {['lights','lights_and_fan','ac_and_lights','servers','machines','general', 'Computers'].map(t => (
+                  <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingTop: '22px' }}>
+              <input
+                type="checkbox"
+                id="auto_shutdown"
+                checked={form.auto_shutdown}
+                onChange={e => setForm(p => ({ ...p, auto_shutdown: e.target.checked }))}
+                style={{ width: '16px', height: '16px', accentColor: 'var(--teal)', cursor: 'pointer' }}
+              />
+              <label htmlFor="auto_shutdown" style={{ fontSize: '13px', color: 'var(--text-1)', cursor: 'pointer' }}>
+                Enable auto-shutdown
+              </label>
+            </div>
+          </div>
+
+          <button
+            onClick={submit}
+            disabled={saving}
+            className="btn btn-primary"
+            style={{ marginTop: '16px', width: '100%' }}
+          >
+            {saving ? 'Creating room...' : 'Create Room'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+
+
+
+
+
+
+

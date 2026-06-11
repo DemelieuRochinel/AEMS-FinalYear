@@ -34,22 +34,22 @@ export const useSocket = () => {
       setConnected(false);
     });
 
-    // ── Live sensor data (every 5 seconds from ESP32) ────────
-    socket.on('sensor_data', (data) => {
+    // ── Live sensor data (every 5 seconds from ESP32)
+        socket.on('sensor_data', (data) => {
       setLiveReading(data);
     });
 
-    // ── Room relay state changed ──────────────────────────────
+    // ── Room relay state changed
     socket.on('room_update', (data) => {
       setRoomUpdates(prev => [data, ...prev].slice(0, 50));
     });
 
-    // ── Alert triggered by automation engine ─────────────────
+    // ── Alert triggered by automation engine
     socket.on('alert_triggered', (data) => {
       setAlerts(prev => [{ ...data, id: Date.now() }, ...prev].slice(0, 20));
     });
 
-    // ── Device online/offline ────────────────────────────────
+    // ── Device online/offline
     socket.on('device_status', (data) => {
       setDeviceStatus(prev => ({
         ...prev,
@@ -57,7 +57,7 @@ export const useSocket = () => {
       }));
     });
 
-    // ── Alert resolved ────────────────────────────────────────
+    // ── Alert resolved
     socket.on('alert_resolved', (data) => {
       setAlerts(prev => prev.filter(a => a.alertId !== data.alertId));
     });
@@ -67,7 +67,7 @@ export const useSocket = () => {
     };
   }, []);
 
-  // ── Send relay command from dashboard ────────────────────
+  // ── Send relay command from dashboard
   const sendCommand = (deviceId, relayId, action) => {
     if (socketRef.current?.connected) {
       socketRef.current.emit('control_device', {

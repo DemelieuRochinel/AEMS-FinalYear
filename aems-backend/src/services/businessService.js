@@ -3,8 +3,11 @@ const db = require('../config/firebase');
 const businessesRef = db.ref('businesses');
 
 
+// the fuction to create a business
 const createBusiness = async (businessId, data) => {
 /*
+
+here are all the type of business that the user can fill in the business type
  Office / Administration
  Shop / Retail
  Restaurant / Food service
@@ -13,7 +16,7 @@ const createBusiness = async (businessId, data) => {
  Small factory / Workshop
 */
 if(!data.name || !data.owner_email){
-  throw new error("You must fill all the information correct");
+  throw new Error("You must fill all the information correct");
 }
 
     try {
@@ -24,6 +27,7 @@ if(!data.name || !data.owner_email){
             owner_email: data.owner_email || '',
             location: data.location || '',
             business_type: data.business_type ||'office',// shope, 
+
             subscription_plan: data.subscription_plan || 'basic', 
             subscription_active: true, //true, flase if not active 
             created_at: new Date().toISOString(),
@@ -52,6 +56,9 @@ if(!data.name || !data.owner_email){
     }
 };
 
+
+
+// fuction to get business by Id
 const getBusinessById = async (businessId) => {
   try {
     const snapshot = await businessesRef.child(businessId).once('value');
@@ -68,6 +75,9 @@ const getBusinessById = async (businessId) => {
   }
 };
 
+
+
+//fuction to get all the business in the system
 const getAllBusinesses = async () => {
   try {
     const snapshot = await businessesRef.once('value');
@@ -90,6 +100,8 @@ const getAllBusinesses = async () => {
   }
 };
 
+
+// fuction to update business 
 const updateBusiness = async (businessId, updates) => {
   try {
     // First check business exists
@@ -114,6 +126,8 @@ const updateBusiness = async (businessId, updates) => {
   }
 };
 
+
+//fuctoin to update the user business setting 
 const updateBusinessSettings = async (businessId, settings) => {
   try {
     await businessesRef
@@ -129,6 +143,8 @@ const updateBusinessSettings = async (businessId, settings) => {
   }
 };
 
+
+//fuction to delet business 
 const deleteBusiness = async (businessId) => {
   try {
     await businessesRef.child(businessId).remove();
@@ -140,6 +156,8 @@ const deleteBusiness = async (businessId) => {
   }
 };
 
+
+//get thr businessSettings
 const getBusinessSettings = async (businessId) => {
   try {
     const snapshot = await businessesRef

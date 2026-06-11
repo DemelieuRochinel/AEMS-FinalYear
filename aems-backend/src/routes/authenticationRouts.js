@@ -36,7 +36,7 @@ router.post('/login', async (req, res) => {
 
     if (!email || !password) {
       return res.status(400).json({
-        error:   'Missing fields',
+        error:   'Invalid Credentials',
         message: 'Email and password are required',
       });
     }

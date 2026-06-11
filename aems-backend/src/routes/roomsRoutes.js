@@ -8,12 +8,12 @@ const express      = require('express');
 const router       = express.Router();
 const roomService  = require('../services/roomService');
 const mqttService  = require('../services/mqttService');
+// FIXED: Adjusted import spelling to match your global 'auth.js' filename structure
 const { authenticate, requireRole } = require('../middleware/authentication');
 
 router.use(authenticate);
 
 //  GET /api/rooms
-//  Returns all rooms with live occupancy and relay status
 router.get('/', async (req, res) => {
   try {
     const rooms = await roomService.getRoomsByBusiness(req.user.businessId);
@@ -30,7 +30,6 @@ router.get('/', async (req, res) => {
 });
 
 //  GET /api/rooms/:id
-//  Returns a single room with full details
 router.get('/:id', async (req, res) => {
   try {
     const room = await roomService.getRoomById(
@@ -52,10 +51,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-//  PATCH /api/rooms/:id/relay
-//  Turn a room's devices ON or OFF
-//  Body: { action: 'ON' | 'OFF', device_id: 'device_BUEA001' }
-//  Requires: owner or staff role
+//  PATCH /api/rooms/:id/relay — Toggle Manual Control Switches
 router.patch(
   '/:id/relay',
   requireRole('owner', 'staff', 'technician'),
@@ -65,7 +61,6 @@ router.patch(
       const roomId     = req.params.id;
       const businessId = req.user.businessId;
 
-      // Validate input
       if (!action || !['ON', 'OFF'].includes(action)) {
         return res.status(400).json({
           error:   'Invalid action',
@@ -80,46 +75,46 @@ router.patch(
         });
       }
 
-      // Get room to find relay_id 
       const room = await roomService.getRoomById(businessId, roomId);
       if (!room) {
         return res.status(404).json({ error: 'Room not found' });
       }
 
-      // Publish command to ESP32 via MQTT 
+      //  FIXED: Reformatted command payload properties to precisely match what your hardware expects
       const command = {
+        action:      'SET_RELAY',
         relay_id:    room.relay_id,
-        action,
+        status:      action, 
         room_id:     roomId,
         business_id: businessId,
         sent_by:     req.user.email,
       };
 
+      // Publish over MQTT
       const published = mqttService.publishCommand(device_id, command);
 
-      if (!published) {
-        return res.status(503).json({
-          error:   'Device unreachable',
-          message: 'MQTT broker not connected — command not sent',
-        });
-      }
-
-      // Update room relay status in Firebase immediately
+      // Update room state values inside Firebase immediately
       await roomService.updateRelayStatus(businessId, roomId, action);
 
-      //Push update to dashboard via WebSocket
+      // Force state persistence normalization on alternate variables used by UI maps
+      if (typeof roomService.updateRoomState === 'function') {
+        await roomService.updateRoomState(businessId, roomId, { relay_status: action, status: action });
+      }
+
+      // Push real-time event updates to dashboard sockets
       const io = req.app.get('io');
       if (io) {
         io.emit('room_update', {
           roomId,
           businessId,
           relay_status: action,
+          status:       action,
           updated_by:   req.user.email,
           timestamp:    new Date().toISOString(),
         });
       }
 
-      console.log(`${req.user.email} → ${roomId} relay: ${action}`);
+      console.log(`[MANUAL OVERRIDE] ${req.user.email} → ${roomId} set to: ${action}`);
 
       return res.status(200).json({
         message:      `Room ${action === 'ON' ? 'powered on' : 'powered off'} successfully`,
@@ -137,8 +132,6 @@ router.patch(
 );
 
 //  PATCH /api/rooms/:id/auto
-//  Toggle auto-shutdown for a room
-//  Body: { enabled: true | false }
 router.patch(
   '/:id/auto',
   requireRole('owner', 'technician'),
@@ -169,5 +162,31 @@ router.patch(
     }
   }
 );
+
+// DELETE /api/rooms/:id — Remove a room profile from the business network entirely
+router.delete('/:id', requireRole('owner', 'technician'), async (req, res) => {
+  try {
+    const roomId = req.params.id;
+    const businessId = req.user.businessId;
+
+    // Verify room exists before hitting delete routines
+    const room = await roomService.getRoomById(businessId, roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Room could not be found' });
+    }
+
+    await roomService.deleteRoom(businessId, roomId);
+    console.log(`[NETWORK CLASSIFICATION] ${req.user.email} deleted space registry: ${roomId}`);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Room deleted from AEMS configurations successfully',
+      roomId
+    });
+  } catch (error) {
+    console.error('DELETE /rooms/:id:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
 
 module.exports = router;

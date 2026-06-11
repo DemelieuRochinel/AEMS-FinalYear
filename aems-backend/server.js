@@ -13,6 +13,7 @@ const mqttService = require('./src/services/mqttService');
 const automationEngine = require('./src/services/automationEngine');
 const schedulerService = require('./src/services/schedulerService');
 const emailService     = require('./src/services/emailService');
+const businessRoutes = require('./src/routes/businessRoutes');
 
 
 
@@ -66,7 +67,6 @@ app.get('/api/health', (req, res) => {
 });
 
 // Import all route files
-
 const authenticationRoutes  = require('./src/routes/authenticationRouts');
 const readingsRoutes = require('./src/routes/readingsRoutes');
 const roomsRoutes    = require('./src/routes/roomsRoutes');
@@ -80,6 +80,7 @@ app.use('/api/readings', readingsRoutes);
 app.use('/api/rooms',    roomsRoutes);
 app.use('/api/alerts',   alertsRoutes);
 app.use('/api/bill',     billRoutes);
+app.use('/api/business', businessRoutes);
 
 
 //404 handler

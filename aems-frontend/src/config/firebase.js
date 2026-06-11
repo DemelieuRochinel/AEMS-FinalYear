@@ -1,18 +1,3 @@
-// // Import the functions you need from the SDKs you need
-// import { initializeApp } from "firebase/app";
-// // TODO: Add SDKs for Firebase products that you want to use
-// // https://firebase.google.com/docs/web/setup#available-libraries
-
-// // Your web app's Firebase configuration
-// const firebaseConfig = {
-//   apiKey: "AIzaSyBTxplf0n_KgIp-N-BEd2Awz5RQpkWtO2A",
-//   authDomain: "aems-finalyear-cameroon.firebaseapp.com",
-//   databaseURL: "https://aems-finalyear-cameroon-default-rtdb.europe-west1.firebasedatabase.app",
-//   projectId: "aems-finalyear-cameroon",
-//   storageBucket: "aems-finalyear-cameroon.firebasestorage.app",
-//   messagingSenderId: "606882122329",
-//   appId: "1:606882122329:web:cc9e059e39227219713f48"
-// };
 
 // // Initialize Firebase
 // const app = initializeApp(firebaseConfig);

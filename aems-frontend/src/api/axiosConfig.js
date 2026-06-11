@@ -1,24 +1,21 @@
-// ═══════════════════════════════════════════════════════════
 //  AXIOS CONFIGURATION
 //  Base HTTP client for all API calls to AEMS backend
 //  Automatically attaches JWT token to every request
 //
-//  University of Buea — LEKEUGO DEMELIEU ROCHINEL FE22A247
-// ═══════════════════════════════════════════════════════════
 
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const BASE_URL = import.meta.env.VITE_API_URL;
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000,
+  timeout: 10000, // so here is meaning 10s
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// ── Request interceptor — attach JWT token ───────────────────
+//Request interceptor — attach JWT token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('aems_token');
@@ -30,7 +27,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ── Response interceptor — handle token expiry ──────────────
+// ── Response interceptor — handle token expiry─
 api.interceptors.response.use(
   (response) => response,
   (error) => {

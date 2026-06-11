@@ -18,27 +18,22 @@ const mqttService     = require('./mqttService');
 
 // Engine configuration 
 const ENGINE_CONFIG = {
-  cycleIntervalMs:    30 * 1000,   // evaluate rules every 30 seconds
+  cycleIntervalMs:    10 * 1000,   // ⚡ Evaluates every 10 seconds for active testing
   defaultVoltageMin:  190,         // volts — ENEO danger threshold
   defaultVoltageMax:  245,         // volts — overvoltage threshold
   defaultShutdownMin: 15,          // minutes empty before auto-shutdown
-
 };
 
 // Track recent alerts to prevent spam
-// Key: `${businessId}_${alertType}_${roomId}` Value: timestamp
-
 const recentAlerts = new Map();
 const ALERT_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes between same alerts
 
-//  Module state
+// Module state
 let ioInstance       = null;
 let engineInterval   = null;
 let isRunning        = false;
 
-//  INITIALIZE — Start the automation engine
-//  Called from server.js after MQTT is connected
-
+// ── INITIALIZE ──
 const initialize = (io) => {
   ioInstance = io;
 
@@ -49,7 +44,6 @@ const initialize = (io) => {
 
   console.log('Automation engine starting...');
 
-  // Run first cycle immediately then repeat
   _runCycle();
   engineInterval = setInterval(_runCycle, ENGINE_CONFIG.cycleIntervalMs);
   engineInterval.unref();
@@ -58,8 +52,7 @@ const initialize = (io) => {
   console.log(`Automation engine running (cycle: every ${ENGINE_CONFIG.cycleIntervalMs/1000}s)`);
 };
 
-//  PRIVATE — Main evaluation cycle
-
+// ── ENGINE RUN CYCLE ──
 const _runCycle = async () => {
   try {
     const businesses = await businessService.getAllBusinesses();
@@ -74,61 +67,16 @@ const _runCycle = async () => {
     }
 
   } catch (err) {
-    // Log full error details to find root cause
-    const msg = err instanceof Error ? err.message : JSON.stringify(err);
-    console.error('Automation cycle error:', msg);
+    console.error('Automation cycle error:', err instanceof Error ? err.message : err);
   }
 };
 
-// const _evaluateBusinessRules = async (business) => {
-//   const businessId = business.id;
-//   const settings   = business.settings || {};
-
-//   try {
-//     let latestReading = null;
-//     let rooms         = [];
-
-//     try {
-//       latestReading = await readingsService.getLatestReading(businessId);
-//     } catch (err) {
-//       console.error(`getLatestReading failed for ${businessId}:`,
-//         err instanceof Error ? err.message : String(err)
-//       );
-//     }
-
-//     try {
-//       rooms = await roomService.getRoomsByBusiness(businessId);
-//     } catch (err) {
-//       console.error(`getRoomsByBusiness failed for ${businessId}:`,
-//         err instanceof Error ? err.message : String(err)
-//       );
-//     }
-
-//     if (Array.isArray(rooms) && rooms.length > 0) {
-//       await _ruleEmptyRoomShutdown(businessId, rooms, settings);
-//       await _ruleAfterHoursShutdown(businessId, rooms, settings);
-//     }
-
-//     if (latestReading && latestReading.main) {
-//       await _ruleVoltageProtection(businessId, latestReading, settings);
-//       await _ruleDailyBudget(businessId, latestReading, settings);
-//     }
-
-//   } catch (err) {
-//     const msg = err instanceof Error ? err.message : JSON.stringify(err);
-//     console.error(`Rules evaluation error for ${businessId}:`, msg);
-//   }
-// };
-
-
-
-//  PRIVATE — Evaluate all rules for one business
+// ── EVALUATE BUSINESS RULES ──
 const _evaluateBusinessRules = async (business) => {
   const businessId = business.id;
   const settings   = business.settings || {};
 
   try {
-    // Run both queries — if one fails, use empty default
     let latestReading = null;
     let rooms         = [];
 
@@ -144,15 +92,13 @@ const _evaluateBusinessRules = async (business) => {
       console.error(`Could not get rooms for ${businessId}:`, err.message);
     }
 
-    if(!isRunning) return;
+    if (!isRunning) return;
 
-    // Only run room rules if we have rooms
     if (rooms.length > 0) {
       await _ruleEmptyRoomShutdown(businessId, rooms, settings);
       await _ruleAfterHoursShutdown(businessId, rooms, settings);
     }
 
-    // Only run reading rules if we have a valid reading
     if (latestReading && latestReading.main) {
       await _ruleVoltageProtection(businessId, latestReading, settings);
       await _ruleDailyBudget(businessId, latestReading, settings);
@@ -160,18 +106,10 @@ const _evaluateBusinessRules = async (business) => {
 
   } catch (err) {
     console.error(`Rules evaluation error for ${businessId}:`, err.message);
-    // Never crash the engine — log and continue
   }
 };
 
-
-
-//  RULE 1 — Empty Room Shutdown
-//  IF room has been empty longer than shutdown delay
-//  AND auto_shutdown is enabled for that room
-//  AND relay is currently ON
-//  THEN send OFF command to ESP32
-
+// ── RULE 1: EMPTY ROOM SHUTDOWN ──
 const _ruleEmptyRoomShutdown = async (businessId, rooms, settings) => {
   const delayMinutes = settings.auto_shutdown_delay || ENGINE_CONFIG.defaultShutdownMin;
   const delayMs      = delayMinutes * 60 * 1000;
@@ -179,55 +117,50 @@ const _ruleEmptyRoomShutdown = async (businessId, rooms, settings) => {
 
   for (const room of rooms) {
     try {
-      // Skip rooms with auto_shutdown disabled (e.g. server room)
-      if (!room.auto_shutdown)      continue;
-
-      // Skip rooms that are occupied
-      if (room.occupied)            continue;
-
-      // Skip rooms already powered off
+      if (!room.auto_shutdown) continue;
+      if (room.occupied) continue;
       if (room.relay_status === 'OFF') continue;
 
-      // Check if room has been empty long enough
-      if (!room.empty_since)        continue;
+      // FIXED: Fallback to current time if empty_since is uninitialized
+      let emptyTime = room.empty_since;
+      if (!emptyTime) {
+        emptyTime = new Date().toISOString();
+        if (typeof roomService.updateRoomState === 'function') {
+          await roomService.updateRoomState(businessId, room.id, { empty_since: emptyTime, occupied: false });
+        }
+      }
 
-      const emptyDurationMs = now - new Date(room.empty_since).getTime();
-
+      const emptyDurationMs = now - new Date(emptyTime).getTime();
       if (emptyDurationMs < delayMs) continue;
 
       const emptyMinutes = Math.round(emptyDurationMs / 60000);
-
       console.log(`Rule 1: ${room.name} empty ${emptyMinutes}min → shutting down`);
 
-      // Get device that controls this room
       const devices = await deviceService.getDevicesByBusiness(businessId);
-      if (devices.length === 0) continue;
+      if (!devices || devices.length === 0) continue;
+      const device = devices[0];
 
-      const device = devices[0]; // primary device
-
-      // Send OFF command to ESP32 via MQTT
       try {
-  mqttService.publishCommand(device.id, {
-    relay_id:    room.relay_id,
-    action:      'OFF',
-    room_id:     room.id,
-    business_id: businessId,
-    reason:      'auto_shutdown',
-  });
-} catch (mqttErr) {
-  // MQTT failure does not stop automation — relay state still saved to Firebase
-  console.log(`MQTT offline — command saved to Firebase only`);
-}
-      // Update relay status in Firebase
+        // FIXED: Matched action and status to what your ESP32 simulator expects
+        mqttService.publishCommand(device.id, {
+          action:      'SET_RELAY',
+          relay_id:    room.relay_id,
+          status:      'OFF',
+          room_id:     room.id,
+          business_id: businessId,
+          reason:      'auto_shutdown',
+        });
+      } catch (mqttErr) {
+        console.log(`MQTT offline — command saved to Firebase only`);
+      }
+
       await roomService.updateRelayStatus(businessId, room.id, 'OFF');
 
-      // Calculate energy saved
       const hoursEmpty     = emptyDurationMs / 3600000;
-      const estimatedWatts = 500; // average room consumption
+      const estimatedWatts = 500; 
       const savedKwh       = Math.round(estimatedWatts * hoursEmpty / 1000 * 100) / 100;
       const savedFcfa      = readingsService.calculateCostFcfa(savedKwh);
 
-      // Create alert (with cooldown check)
       const alertKey = `${businessId}_shutdown_${room.id}`;
       if (_canCreateAlert(alertKey)) {
         await alertsService.createAlert(
@@ -239,7 +172,6 @@ const _ruleEmptyRoomShutdown = async (businessId, rooms, settings) => {
         _markAlertCreated(alertKey);
       }
 
-      // Push live update to dashboard
       _emitToDashboard('room_update', {
         businessId,
         roomId:       room.id,
@@ -252,37 +184,29 @@ const _ruleEmptyRoomShutdown = async (businessId, rooms, settings) => {
       });
 
     } catch (err) {
-      console.error(` Rule 1 error for room ${room.id}:`, err.message);
+      console.error(`Rule 1 error for room ${room.id}:`, err.message);
     }
   }
 };
 
-//  RULE 2 — After-Hours Shutdown
-//  IF current time is past closing time
-//  AND it is a weekday (Mon–Fri)
-//  THEN shut down all non-essential circuits
-
+// ── RULE 2: AFTER HOURS SHUTDOWN ──
 const _ruleAfterHoursShutdown = async (businessId, rooms, settings) => {
   const closingTime = settings.closing_time || '18:30';
   const now         = new Date();
-  const dayOfWeek   = now.getDay(); // 0=Sun, 6=Sat
+  const dayOfWeek   = now.getDay(); 
 
-  // Only apply on weekdays
   const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
   if (!isWeekday) return;
 
-  // Parse closing time
   const [closeHour, closeMin] = closingTime.split(':').map(Number);
   const closingMinutes = closeHour * 60 + closeMin;
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-  // Only run once — between closing time and closing time + 30 minutes
   const isAfterHours = currentMinutes >= closingMinutes &&
                        currentMinutes <= closingMinutes + 30;
 
   if (!isAfterHours) return;
 
-  // Check if we already ran this rule today
   const alertKey = `${businessId}_afterhours_${now.toDateString()}`;
   if (!_canCreateAlert(alertKey)) return;
 
@@ -295,14 +219,15 @@ const _ruleAfterHoursShutdown = async (businessId, rooms, settings) => {
   console.log(`Rule 2: After hours (${closingTime}) — shutting down ${roomsStillOn.length} rooms`);
 
   const devices = await deviceService.getDevicesByBusiness(businessId);
-  if (devices.length === 0) return;
-
+  if (!devices || devices.length === 0) return;
   const device = devices[0];
 
   for (const room of roomsStillOn) {
+    // FIXED: Aligned payload structural parameter formatting
     mqttService.publishCommand(device.id, {
+      action:      'SET_RELAY',
       relay_id:    room.relay_id,
-      action:      'OFF',
+      status:      'OFF',
       room_id:     room.id,
       business_id: businessId,
       reason:      'after_hours',
@@ -311,7 +236,6 @@ const _ruleAfterHoursShutdown = async (businessId, rooms, settings) => {
     await roomService.updateRelayStatus(businessId, room.id, 'OFF');
   }
 
-  // Create single after-hours alert
   await alertsService.createAlert(businessId, {
     type:      'after_hours_shutdown',
     severity:  'info',
@@ -329,10 +253,7 @@ const _ruleAfterHoursShutdown = async (businessId, rooms, settings) => {
   });
 };
 
-//  RULE 3 — Voltage Protection
-//  IF voltage is below min OR above max
-//  THEN create urgent alert (MQTT handler already cuts power)
-
+// ── RULE 3: VOLTAGE PROTECTION ──
 const _ruleVoltageProtection = async (businessId, reading, settings) => {
   const voltageMin = settings.voltage_min || ENGINE_CONFIG.defaultVoltageMin;
   const voltageMax = settings.voltage_max || ENGINE_CONFIG.defaultVoltageMax;
@@ -366,7 +287,7 @@ const _ruleVoltageProtection = async (businessId, reading, settings) => {
     const alertKey = `${businessId}_high_voltage`;
     if (!_canCreateAlert(alertKey)) return;
 
-    console.warn(` Rule 3: HIGH VOLTAGE ${voltage}V > ${voltageMax}V`);
+    console.warn(`Rule 3: HIGH VOLTAGE ${voltage}V > ${voltageMax}V`);
 
     await alertsService.createAlert(
       businessId,
@@ -385,10 +306,7 @@ const _ruleVoltageProtection = async (businessId, reading, settings) => {
   }
 };
 
-//  RULE 4 — Daily Budget Exceeded
-//  IF today's kWh > business daily_kwh_limit
-//  THEN send warning alert
-
+// ── RULE 4: DAILY ENERGY BUDGET ──
 const _ruleDailyBudget = async (businessId, reading, settings) => {
   const limit  = settings.daily_kwh_limit || 50;
   const kwh    = reading.main?.energy_kwh || 0;
@@ -398,7 +316,7 @@ const _ruleDailyBudget = async (businessId, reading, settings) => {
   const alertKey = `${businessId}_budget_${new Date().toDateString()}`;
   if (!_canCreateAlert(alertKey)) return;
 
-  console.warn(` Rule 4: Budget exceeded ${kwh} kWh > ${limit} kWh`);
+  console.warn(`Rule 4: Budget exceeded ${kwh} kWh > ${limit} kWh`);
 
   await alertsService.createAlert(businessId, {
     type:      'daily_limit_exceeded',

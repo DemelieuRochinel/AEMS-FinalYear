@@ -1,11 +1,8 @@
-
 const db = require('../config/firebase');
 
 const roomsRef = (businessId) => db.ref(`rooms/${businessId}`);
 
-// ───────────────────────────────────────────────────────────
-//  CREATE — Add a new room to a business
-// ───────────────────────────────────────────────────────────
+// ── CREATE — Add a new room to a business ──
 const createRoom = async (businessId, roomId, data) => {
   try {
     const roomData = {
@@ -20,6 +17,7 @@ const createRoom = async (businessId, roomId, data) => {
       // Live state fields — updated by automation engine
       occupied:       false,
       relay_status:   'OFF',
+      status:         'OFF', // Normalization field added
       last_motion:    null,
       empty_since:    null,
       auto_shutdown:  data.auto_shutdown  ?? true,
@@ -69,20 +67,16 @@ const getRoomById = async (businessId, roomId) => {
 const updateRoomOccupancy = async (businessId, roomId, occupied) => {
   try {
     const now = new Date().toISOString();
-
     const update = { occupied };
 
     if (occupied) {
-      // Room just became occupied — clear empty timer
       update.last_motion = now;
       update.empty_since  = null;
     } else {
-      // Room just became empty — start empty timer
       update.empty_since = now;
     }
 
     await roomsRef(businessId).child(roomId).update(update);
-
     return { success: true, roomId, occupied };
 
   } catch (error) {
@@ -91,11 +85,11 @@ const updateRoomOccupancy = async (businessId, roomId, occupied) => {
   }
 };
 
-
 const updateRelayStatus = async (businessId, roomId, status) => {
   try {
     await roomsRef(businessId).child(roomId).update({
       relay_status: status,
+      status:       status, // Synchronize status naming property variations
       updated_at:   new Date().toISOString(),
     });
 
@@ -104,6 +98,20 @@ const updateRelayStatus = async (businessId, roomId, status) => {
   } catch (error) {
     console.error('updateRelayStatus error:', error.message);
     throw new Error(`Failed to update relay: ${error.message}`);
+  }
+};
+
+// ── FIXED: Added missing payload state updater wrapper function ──
+const updateRoomState = async (businessId, roomId, updates) => {
+  try {
+    await roomsRef(businessId).child(roomId).update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    });
+    return { success: true, roomId };
+  } catch (error) {
+    console.error('updateRoomState error:', error.message);
+    throw new Error(`Failed to update full room state: ${error.message}`);
   }
 };
 
@@ -120,7 +128,6 @@ const toggleAutoShutdown = async (businessId, roomId, enabled) => {
     throw new Error(`Failed to toggle auto-shutdown: ${error.message}`);
   }
 };
-
 
 const listenToRooms = (businessId, callback) => {
   roomsRef(businessId).on('value', (snapshot) => {
@@ -139,7 +146,6 @@ const stopListening = (businessId) => {
   roomsRef(businessId).off();
 };
 
-
 const deleteRoom = async (businessId, roomId) => {
   try {
     await roomsRef(businessId).child(roomId).remove();
@@ -157,6 +163,7 @@ module.exports = {
   getRoomById,
   updateRoomOccupancy,
   updateRelayStatus,
+  updateRoomState, // Exported fixed hook
   toggleAutoShutdown,
   listenToRooms,
   stopListening,

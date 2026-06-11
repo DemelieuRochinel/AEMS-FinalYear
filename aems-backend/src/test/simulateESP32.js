@@ -18,7 +18,7 @@ require('dotenv').config();
 const CONFIG = {
   brokerUrl:    process.env.MQTT_BROKER_URL,
   deviceId:     'device_BUEA001',
-  businessId:   'business_demo_001',
+  businessId:   'biz_1781198027374',
   intervalMs:   5000,    // send reading every 5 seconds
   clientId:     `esp32-simulator-${Date.now()}`,
 };
@@ -46,9 +46,17 @@ let state = {
   },
 };
 
-//  HELPERS — Generate realistic sensor values
-``
-// Voltage fluctuates like real ENEO supply in Cameroon
+const resetDailyIfNewDay = () => {
+  const today = new Date().toDateString();
+  if (state.lastResetDay && state.lastResetDay !== today) {
+    console.log('New day detected — resetting energy counter');
+    state.energy_kwh = 0;
+  }
+  state.lastResetDay = today;
+};
+
+
+// Voltage fluctuates like real SOCADEL supply in Cameroon
 const generateVoltage = () => {
   const hour = new Date().getHours();
 
@@ -68,8 +76,8 @@ const generateCurrent = (rooms, relays) => {
   if (relays.relay_2 === 'ON') total += rooms.room_2.occupied ? 4.8 : 0.1;
   if (relays.relay_3 === 'ON') total += rooms.room_3.occupied ? 2.1 : 0.1;
   if (relays.relay_4 === 'ON') total += 1.8; // servers always consume
-  total += (Math.random() - 0.5) * 0.5; // small noise
-  return Math.round(Math.max(0.5, total) * 100) / 100;
+  total += (Math.random() - 0.5) * 0.3; // small noise
+  return Math.round(Math.max(0.1, total) * 100) / 100;
 };
 
 // Per-room current from ACS712
@@ -176,8 +184,9 @@ client.on('connect', () => {
 
   // Send reading every 5 seconds
   const interval = setInterval(() => {
-    simulateOccupancyChanges();
 
+    resetDailyIfNewDay();
+    simulateOccupancyChanges();
     const reading = buildReading();
     const topic   = `aems/${CONFIG.deviceId}/readings`;
     const payload = JSON.stringify(reading);
