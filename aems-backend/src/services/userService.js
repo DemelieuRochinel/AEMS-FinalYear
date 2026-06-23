@@ -20,7 +20,7 @@ const createUser = async (userId, data) => {
       email:         data.email.toLowerCase().trim(),
       phone:         data.phone      || null,
       password_hash: hashedPassword,
-      role:          data.role       || ROLES.STAFF,  // staff/owner have one business, technician has many
+      role:          data.role       || ROLES.STAFF, 
       business_id:   data.business_id || null,
       business_ids:  data.business_ids|| [],
       language:      data.language    || 'eng',
@@ -28,7 +28,6 @@ const createUser = async (userId, data) => {
       last_login:    null,
 
       notifications: {
-        whatsapp:       data.notifications?.whatsapp  ?? true,
         email:          data.notifications?.email     ?? true,
         urgent:         true,
         warnings:       true,

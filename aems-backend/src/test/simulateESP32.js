@@ -17,13 +17,14 @@ require('dotenv').config();
 //Simulator configuration
 const CONFIG = {
   brokerUrl:    process.env.MQTT_BROKER_URL,
-  deviceId:     'device_BUEA001',
-  businessId:   'biz_1781198027374',
+  deviceId:     'dev_1782211130918',
+  businessId:   'biz_1782211129883',
   intervalMs:   5000,    // send reading every 5 seconds
   clientId:     `esp32-simulator-${Date.now()}`,
 };
 
 // Simulated state (changes over time like real hardware)
+
 let state = {
   // Energy meter — cumulative kWh increases over time
   energy_kwh:    0,
@@ -42,7 +43,7 @@ let state = {
     relay_1: 'ON',
     relay_2: 'OFF',
     relay_3: 'ON',
-    relay_4: 'ON',  // Server room always ON (no auto-shutdown)
+    relay_4: 'OFF'
   },
 };
 
@@ -75,7 +76,7 @@ const generateCurrent = (rooms, relays) => {
   if (relays.relay_1 === 'ON') total += rooms.room_1.occupied ? 3.2 : 0.1;
   if (relays.relay_2 === 'ON') total += rooms.room_2.occupied ? 4.8 : 0.1;
   if (relays.relay_3 === 'ON') total += rooms.room_3.occupied ? 2.1 : 0.1;
-  if (relays.relay_4 === 'ON') total += 1.8; // servers always consume
+  if (relays.relay_4 === 'ON') total += 1.8// servers always consume
   total += (Math.random() - 0.5) * 0.3; // small noise
   return Math.round(Math.max(0.1, total) * 100) / 100;
 };
@@ -201,12 +202,7 @@ client.on('connect', () => {
       const occupied = Object.values(state.rooms)
         .filter(r => r.occupied).length;
 
-      console.log(
-        ` Reading #${readingCount} sent | ` +
-        `V: ${reading.main.voltage}V | ` +
-        `P: ${reading.main.power}W | ` +
-        `kWh: ${reading.main.energy_kwh} | ` +
-        `Rooms: ${occupied}/4 occupied`
+      console.log(` Reading #${readingCount} sent | ` + `V: ${reading.main.voltage}V | ` + `P: ${reading.main.power}W | ` + `kWh: ${reading.main.energy_kwh} | ` +  `Rooms: ${occupied}/4 occupied`
       );
     });
   }, CONFIG.intervalMs);
@@ -232,7 +228,6 @@ client.on('connect', () => {
 
 client.on('error', (err) => {
   console.error(' Simulator connection error:', err.message);
-  console.error('   Make sure Mosquitto is running: net start mosquitto');
   process.exit(1);
 });
 

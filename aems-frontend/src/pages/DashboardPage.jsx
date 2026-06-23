@@ -61,7 +61,7 @@ export default function DashboardPage() {
       if (t) {
         const sampled = (t.data.chart_data || []).filter((_, i) => i % 10 === 0);
         setChartData(sampled.map(item => ({
-          time: new Date(item.time).toLocaleTimeString('fr-CM', { hour: '2-digit', minute: '2-digit' }),
+          time: new Date(item.time).toLocaleTimeString('eng-CM', { hour: '2-digit', minute: '2-digit' }),
           power: Math.round(item.power || 0),
           voltage: Math.round(item.voltage || 0),
         })));
@@ -73,7 +73,7 @@ export default function DashboardPage() {
     if (!liveReading?.data?.main) return;
     const m = liveReading.data.main;
     setChartData(prev => [...prev.slice(-79), {
-      time: new Date().toLocaleTimeString('fr-CM', { hour: '2-digit', minute: '2-digit' }),
+      time: new Date().toLocaleTimeString('eng-CM', { hour: '2-digit', minute: '2-digit' }),
       power: Math.round(m.power || 0),
       voltage: Math.round(m.voltage || 0),
     }]);
@@ -91,7 +91,8 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="page-header" style={{ marginBottom: '28px' }}>
         <div>
-          <h1 className="page-title">Live Dashboard</h1>
+          <h1 className="page-title" style={{marginLeft: '300px'}}>Live Dashboard</h1>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-2)' }}>
               {business?.name || user?.businessId || 'AEMS System'}
@@ -181,7 +182,7 @@ export default function DashboardPage() {
         {/* Chart Component Panel */}
         <div className="card" style={{ padding: '22px' }}>
           <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-2)', marginBottom: '18px' }}>
-            Power Consumption Trend (Active Live Window)
+            Power Consumption Trend
           </div>
           {chartData.length > 0 ? (
             <>
@@ -247,7 +248,7 @@ export default function DashboardPage() {
               }}>
                 <div>
                   <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-1)' }}>
-                    {room.name}
+                    {rooms.name} 
                   </div>
                   <div style={{
                     fontSize: '10px',

@@ -77,7 +77,7 @@ export const useSocket = () => {
       });
     }
   };
-
+ 
   return {
     connected,
     liveReading,

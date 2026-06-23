@@ -44,7 +44,7 @@ router.get('/estimate', async (req, res) => {
       tariff: {
         tier1: '50 FCFA/kWh (0–110 kWh)',
         tier2: '79 FCFA/kWh (111–400 kWh)',
-        tier3: '94 FCFA/kWh (400+ kWh)',
+        tier3: '94 FCFA/kWh (400kWh)',
       },
     });
 

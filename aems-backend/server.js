@@ -14,6 +14,9 @@ const automationEngine = require('./src/services/automationEngine');
 const schedulerService = require('./src/services/schedulerService');
 const emailService     = require('./src/services/emailService');
 const businessRoutes = require('./src/routes/businessRoutes');
+const devicesRoute   = require("./src/routes/devicesRoute");
+
+// console.log('Checking import:', devicesRoute);
 
 
 
@@ -81,6 +84,7 @@ app.use('/api/rooms',    roomsRoutes);
 app.use('/api/alerts',   alertsRoutes);
 app.use('/api/bill',     billRoutes);
 app.use('/api/business', businessRoutes);
+app.use('/api/device',   devicesRoute);
 
 
 //404 handler

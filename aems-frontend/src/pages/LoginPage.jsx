@@ -5,7 +5,7 @@ import api from '../api/axiosConfig';
 
 export default function LoginPage() {
   const [mode, setMode] = useState('login');  // 'login' or 'register'
-  const [step, setStep] = useState(1);        // 1 or 2 (Wizard condensed to Business Profile)
+  const [step, setStep] = useState(1);       
   
   // Step 1 Fields: User Info
   const [name, setName] = useState('');
@@ -17,6 +17,9 @@ export default function LoginPage() {
   const [business_type, setBusiness_type] = useState('');
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
+
+  //Step 3 Field: device Infor
+  const [devicename, setDeviceName] = useState('');
 
   // Status indicators
   const [error, setError] = useState('');
@@ -36,7 +39,7 @@ export default function LoginPage() {
     color: '#ffffff',
     fontSize: '14px',
     outline: 'none',
-    marginTop: '6px',
+    marginTop: '9px',
     boxSizing: 'border-box',
   };
 
@@ -70,6 +73,7 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
+      
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Incorrect Credentials');
@@ -82,16 +86,17 @@ export default function LoginPage() {
   const nextStep = () => {
     setError('');
     if (step === 1) {
-      if (!name.trim() || !email.trim() || !password) {
-        setError('Please fill in all account fields.');
-        return;
-      }
-      if (password.length < 8) {
-        setError('Password must be at least 8 characters.');
-        return;
-      }
+
+      if (!name.trim() || !email.trim() || !password) return setError('User Information is Required.');
+      if (password.length < 8) return setError('Password must be at least 8 characters (Symbole, letter, number)');
       setStep(2);
+    } else if(step === 2){
+      if (!bizName.trim() || !business_type.trim() || !location.trim()) return setError('Business name, type, and location are required to complete setup.');
+      setStep(3);
+
     }
+
+
   };
 
   const prevStep = () => {
@@ -104,13 +109,12 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setSuccess('');
-    setLoading(true);
-
-    if (!bizName.trim() || !business_type.trim() || !location.trim()) {
-      setError('Business name, type, and location are required to complete setup.');
-      setLoading(false);
+    
+    if(!devicename.trim()){
+      setError('Please fill the device name!');
       return;
     }
+    setLoading(true);
 
     try {
       // Step 1: Create the business dynamically
@@ -133,13 +137,26 @@ export default function LoginPage() {
         business_id: generatedBizId,
       });
 
+
+      //step 3 Create device
+
+      const generatedDeviceId = 'dev_' + Date.now();
+
+      await api.post('/api/device/NewDevice', {
+        deviceId: generatedDeviceId,
+        businessId: generatedBizId,
+        name: devicename
+      })
+
       setSuccess('Account and business environment configured successfully! Sign in now.');
       setMode('login');
       setStep(1);
       
       // Clear Inputs cleanly
       setPassword(''); setName(''); setEmail(''); setBizName('');
-      setPhone(''); setLocation(''); setBusiness_type('');
+      setPhone(''); setLocation(''); setBusiness_type(''); 
+      
+      setDeviceName('');
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data?.error || 'Registration failed. Try again.');
     } finally {
@@ -224,9 +241,11 @@ export default function LoginPage() {
 
           {/* ── Step Indicators for Progress Tracking ── */}
           {mode === 'register' && (
+            
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '0 32px' }}>
-              {[1, 2].map((s) => (
-                <div key={s} style={{ display: 'flex', alignItems: 'center', flex: s !== 2 ? 1 : 'none' }}>
+
+              {[1, 2, 3].map((s) => (
+                <div key={s} style={{ display: 'flex', alignItems: 'center', flex: s !== 3 ? 1 : 'none' }}>
                   <div style={{
                     width: '26px', height: '26px', borderRadius: '50%', 
                     background: step >= s ? '#10b981' : '#223a54',
@@ -235,7 +254,7 @@ export default function LoginPage() {
                   }}>
                     {s}
                   </div>
-                  {s !== 2 && <div style={{ flex: 1, height: '2px', background: step > s ? '#10b981' : '#223a54', margin: '0 12px' }} />}
+                  {s !== 3 && <div style={{ flex: 1, height: '2px', background: step > s ? '#10b981' : '#223a54', margin: '0 12px' }} />}
                 </div>
               ))}
             </div>
@@ -266,14 +285,14 @@ export default function LoginPage() {
               {/* Step 1: User Account Credentials */}
               {step === 1 && (
                 <div>
-                  <h3 style={{ color: '#ffffff', fontSize: '15px', margin: '0 0 4px', textAlign: 'left' }}>Personal Information</h3>
-                  <p style={{ color: '#64748b', fontSize: '12px', margin: '0 0 12px', textAlign: 'left' }}>Set up your master administrative credentials.</p>
+                  <h3 style={{ color: '#ffffff', fontSize: '15px', margin: '0 0 4px', textAlign: 'center' }}>Personal Information</h3>
+                  <p style={{ color: '#64748b', fontSize: '12px', margin: '0 0 12px', textAlign: 'center' }}>Set up your master administrative credentials.</p>
                   
                   <label style={{ ...labelStyle, marginTop: '0px' }}>Your full name</label>
-                  <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Jean-Baptiste Mbarga" style={inputStyle} />
+                  <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Rochinel lekeugo" style={inputStyle} />
                   
                   <label style={labelStyle}>Email Address</label>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@company.com" style={inputStyle} />
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="E@mail.com" style={inputStyle} />
                   
                   <label style={labelStyle}>Password</label>
                   <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Minimum 8 characters" style={inputStyle} />
@@ -287,14 +306,14 @@ export default function LoginPage() {
               {/* Step 2: Commercial Business Configuration */}
               {step === 2 && (
                 <div>
-                  <h3 style={{ color: '#ffffff', fontSize: '15px', margin: '0 0 4px', textAlign: 'left' }}>Business Profile</h3>
-                  <p style={{ color: '#64748b', fontSize: '12px', margin: '0 0 12px', textAlign: 'left' }}>Provide your operation environment details.</p>
+                  <h3 style={{ color: '#ffffff', fontSize: '15px', margin: '0 0 4px', textAlign: 'center' }}>Business Profile</h3>
+                  <p style={{ color: '#64748b', fontSize: '12px', margin: '0 0 12px', textAlign: 'center' }}>Provide your operation environment details.</p>
                   
                   <label style={{ ...labelStyle, marginTop: '0px' }}>Business name</label>
-                  <input type="text" value={bizName} onChange={e => setBizName(e.target.value)} placeholder="Ngozi Enterprise" style={inputStyle} />
+                  <input type="text" value={bizName} onChange={e => setBizName(e.target.value)} placeholder="Enterprise" style={inputStyle} />
                   
                   <label style={labelStyle}>Business type</label>
-                  <input type="text" value={business_type} onChange={e => setBusiness_type(e.target.value)} placeholder="Small factory, Office, etc." style={inputStyle} />
+                  <input type="text" value={business_type} onChange={e => setBusiness_type(e.target.value)} placeholder="Small factory, etc." style={inputStyle} />
                   
                   <label style={labelStyle}>Business location</label>
                   <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="Douala, Cameroon" style={inputStyle} />
@@ -304,10 +323,26 @@ export default function LoginPage() {
                   
                   <div style={{ display: 'flex', marginTop: '20px' }}>
                     <button type="button" onClick={prevStep} disabled={loading} style={secondaryBtnStyle}>Back</button>
+                    <button type="button" onClick={nextStep} style={{ flex: 1, padding: '12px', background: '#10b981', border: 'none', borderRadius: '8px', color: '#ffffff', fontSize: '14px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer' }}>
+                      Device Setup
+                    </button>
+                  </div>
+                </div>
+              )}
+              {step === 3 && (
+                <div>
+                   <h3 style={{ color: '#ffffff', fontSize: '15px', margin: '0 0 4px', textAlign: 'center' }}>Device Profile</h3>
+
+                   <label style={{ ...labelStyle, marginTop: '0px' }}>device name</label>
+                   <input type="text" value={devicename} onChange={e => setDeviceName(e.target.value)} placeholder="ESP32..." style={inputStyle} />
+
+                    <div style={{ display: 'flex', marginTop: '20px' }}>
+                    <button type="button" onClick={prevStep} disabled={loading} style={secondaryBtnStyle}>Back</button>
                     <button type="submit" disabled={loading} style={{ flex: 1, padding: '12px', background: '#10b981', border: 'none', borderRadius: '8px', color: '#ffffff', fontSize: '14px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
                       {loading ? 'Creating Account...' : 'Complete Registration'}
                     </button>
                   </div>
+
                 </div>
               )}
 

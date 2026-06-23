@@ -52,8 +52,7 @@ router.get('/:id', async (req, res) => {
 });
 
 //  PATCH /api/rooms/:id/relay — Toggle Manual Control Switches
-router.patch(
-  '/:id/relay',
+router.patch('/:id/relay',
   requireRole('owner', 'staff', 'technician'),
   async (req, res) => {
     try {

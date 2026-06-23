@@ -6,6 +6,7 @@ export default function RoomsPage() {
   const [loading, setLoading] = useState(true);
   const [toggling,setToggling]= useState({});
 
+
   const fetchRooms = () => {
     api.get('/api/rooms')
       .then(r => setRooms(r.data.rooms || []))
@@ -190,6 +191,136 @@ export default function RoomsPage() {
           );
         })}
       </div>
+
+      <AddRoomCard />
+
     </div>
   );
 }
+
+// here is where ae add Rooms for the business created
+function AddRoomCard() {
+  const [open,    setOpen]    = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [msg,     setMsg]     = useState('');
+  const [form,    setForm]    = useState({
+    name: '', relay_id: 'relay_1', device_type: 'lights', auto_shutdown: true,
+  });
+
+  const submit = async () => {
+    if (!form.name || !form.relay_id) { setMsg('Name and relay ID are required'); return; }
+    setSaving(true);
+    try {
+      await api.post('/api/business/rooms', form);
+      setMsg('Room created successfully! Refresh the Rooms page.');
+      setForm({ name: '', relay_id: 'relay_1', device_type: 'lights', auto_shutdown: true });
+      setTimeout(() => setOpen(false), 2000);
+    } catch (err) {
+      setMsg('Failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: open ? '20px' : '0' }}>
+        <div>
+          <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--teal)' }}>
+            Add New Room
+          </h3>
+          <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '3px' }}>
+            Configure a new room for monitoring and automation
+          </p>
+        </div>
+        <button
+          onClick={() => setOpen(!open)}
+          className="btn btn-primary"
+          style={{ fontSize: '12px', padding: '8px 16px' }}
+        >
+          {open ? '✕ Cancel' : '+ Add Room'}
+        </button>
+      </div>
+
+      {open && (
+        <>
+          {msg && (
+            <div style={{
+              padding: '10px 14px', borderRadius: 'var(--r-md)', marginBottom: '16px',
+              background: msg.includes('success') ? 'rgba(29,158,117,0.1)' : 'rgba(216,90,48,0.1)',
+              color: msg.includes('success') ? 'var(--teal)' : 'var(--coral)',
+              border: `1px solid ${msg.includes('success') ? 'var(--teal)' : 'var(--coral)'}`,
+              fontSize: '13px',
+            }}>
+              {msg}
+            </div>
+          )}
+
+          <div className="grid-2">
+            <div>
+              <label style={{ fontSize: '12px', color: 'var(--text-3)', display: 'block', marginBottom: '6px' }}>
+                Room name *
+              </label>
+              <input
+                className="form-input"
+                placeholder="e.g. Main Office"
+                value={form.name}
+                onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: 'var(--text-3)', display: 'block', marginBottom: '6px' }}>
+                Relay ID *
+              </label>
+              <select
+                className="form-input"
+                value={form.relay_id}
+                onChange={e => setForm(p => ({ ...p, relay_id: e.target.value }))}
+              >
+                {['relay_1','relay_2','relay_3','relay_4','relay_5','relay_6','relay_7','relay_8'].map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: 'var(--text-3)', display: 'block', marginBottom: '6px' }}>
+                Device type
+              </label>
+              <select
+                className="form-input"
+                value={form.device_type}
+                onChange={e => setForm(p => ({ ...p, device_type: e.target.value }))}
+              >
+                {['lights','lights_and_fan','ac_and_lights','servers','machines','general', 'Computers'].map(t => (
+                  <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingTop: '22px' }}>
+              <input
+                type="checkbox"
+                id="auto_shutdown"
+                checked={form.auto_shutdown}
+                onChange={e => setForm(p => ({ ...p, auto_shutdown: e.target.checked }))}
+                style={{ width: '16px', height: '16px', accentColor: 'var(--teal)', cursor: 'pointer' }}
+              />
+              <label htmlFor="auto_shutdown" style={{ fontSize: '13px', color: 'var(--text-1)', cursor: 'pointer' }}>
+                Enable auto-shutdown
+              </label>
+            </div>
+          </div>
+
+          <button
+            onClick={submit}
+            disabled={saving}
+            className="btn btn-primary"
+            style={{ marginTop: '16px', width: '100%' }}
+          >
+            {saving ? 'Creating room...' : 'Create Room'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
