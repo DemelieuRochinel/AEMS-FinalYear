@@ -1,4 +1,3 @@
-
 //  Handles all communication between ESP32 hardware and backend
 //  
 //  TOPICS:
@@ -61,7 +60,7 @@ const initialize = (io) => {
     console.log('MQTT reconnecting...');
   });
 
-  // tart offline device detector
+  // Start offline device detector
   _startOfflineDetector();
 
   return client;
@@ -145,7 +144,7 @@ const _handleReading = async (deviceId, data) => {
     // 3. Check voltage thresholds — protect equipment
     await _checkVoltageAlerts(businessId, deviceId, data.main);
 
-    // 4. Update room occupancy states
+    // 4. Update room occupancy states (UPDATED with room names)
     await _updateRoomStates(businessId, deviceId, data.rooms);
 
     // 5. Mark device as online
@@ -241,17 +240,61 @@ const _checkVoltageAlerts = async (businessId, deviceId, mainData) => {
   }
 };
 
-//  PRIVATE — Update room occupancy from PIR sensor data
+//  ── PRIVATE — Update room occupancy from PIR sensor data ──
+//  ✅ UPDATED: Now saves room names and current readings
+//  ── PRIVATE — Update room occupancy AND relay status from ESP32 data ──
 const _updateRoomStates = async (businessId, deviceId, roomsData) => {
   if (!roomsData) return;
 
   for (const [roomId, roomData] of Object.entries(roomsData)) {
     try {
+      // Prepare update data
+      const updates = {
+        last_seen: new Date().toISOString(),
+      };
+      
+      // Update occupancy if provided
       if (typeof roomData.occupied === 'boolean') {
-        await roomService.updateRoomOccupancy(
-          businessId, roomId, roomData.occupied
-        );
+        updates.occupied = roomData.occupied;
+        
+        // If occupied, update last_motion; if empty, set empty_since
+        if (roomData.occupied) {
+          updates.last_motion = new Date().toISOString();
+          updates.empty_since = null;
+        } else {
+          updates.empty_since = new Date().toISOString();
+        }
       }
+      
+      // ── ✅ NEW: Set relay status based on occupancy ──
+      // The ESP32 simulator sends relay status in the reading
+      // If we have relay data from the reading, use it
+      if (roomData.relay_status) {
+        updates.relay_status = roomData.relay_status;
+        updates.status = roomData.relay_status; // Keep both fields in sync
+      } else if (typeof roomData.occupied === 'boolean') {
+        // Fallback: set relay based on occupancy
+        const relayStatus = roomData.occupied ? 'ON' : 'OFF';
+        updates.relay_status = relayStatus;
+        updates.status = relayStatus;
+      }
+      
+      // Save room name if provided
+      if (roomData.name) {
+        updates.name = roomData.name;
+      }
+      
+      // Save room current if provided
+      if (roomData.current_a !== undefined) {
+        updates.current_a = roomData.current_a;
+      }
+      
+      // Update timestamp
+      updates.updated_at = new Date().toISOString();
+
+      // Apply updates to Firebase
+      await roomService.updateRoomState(businessId, roomId, updates);
+      
     } catch (err) {
       // Non-critical — log and continue
       console.error(`Room update failed for ${roomId}:`, err.message);
@@ -344,6 +387,7 @@ const _onClose = () => {
   console.log('MQTT connection closed');
   isConnected = false;
 };
+
 // Add a clean disconnect method for testing teardowns
 const disconnect = () => {
   if (client) {
@@ -353,6 +397,7 @@ const disconnect = () => {
     });
   }
 };
+
 module.exports = {
   TOPICS,
   initialize,

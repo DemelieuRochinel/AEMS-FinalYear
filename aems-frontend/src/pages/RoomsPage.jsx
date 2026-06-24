@@ -6,7 +6,6 @@ export default function RoomsPage() {
   const [loading, setLoading] = useState(true);
   const [toggling,setToggling]= useState({});
 
-
   const fetchRooms = () => {
     api.get('/api/rooms')
       .then(r => setRooms(r.data.rooms || []))
@@ -20,20 +19,42 @@ export default function RoomsPage() {
 
   const toggleRelay = async (room) => {
     if (toggling[room.id]) return;
+    
     const currentStatus = room.relay_status || room.status || 'OFF';
     const action = currentStatus === 'ON' ? 'OFF' : 'ON';
     
     setToggling(p => ({ ...p, [room.id]: true }));
+    
     try {
+      let deviceId = room.device_id;
+      
+      if (!deviceId) {
+        try {
+          const devicesRes = await api.get('/api/device/list');
+          if (devicesRes.data.devices && devicesRes.data.devices.length > 0) {
+            deviceId = devicesRes.data.devices[0].id;
+          }
+        } catch (err) {
+          console.warn('Could not fetch devices, using fallback');
+          console.warn(err.message);
+        }
+      }
+      
+      if (!deviceId) {
+        deviceId = 'device_BUEA001';
+      }
+      
       await api.patch(`/api/rooms/${room.id}/relay`, {
-        action, 
-        device_id: room.device_id || 'device_BUEA001',
+        action,
+        device_id: deviceId,
       });
+      
       setRooms(prev => prev.map(r =>
         r.id === room.id ? { ...r, relay_status: action, status: action } : r
       ));
     } catch (err) {
       console.error('Relay toggle failed:', err.message);
+      alert(`Failed to toggle relay: ${err.response?.data?.error || err.message}`);
     } finally {
       setToggling(p => ({ ...p, [room.id]: false }));
     }
@@ -41,19 +62,22 @@ export default function RoomsPage() {
 
   const deleteRoom = async (roomId) => {
     if (!window.confirm("Are you sure you want to delete this room from your AEMS network?")) return;
+    
     try {
       await api.delete(`/api/rooms/${roomId}`);
       setRooms(prev => prev.filter(r => r.id !== roomId));
     } catch (err) {
       console.error('Failed to delete room:', err.message);
-      alert('Could not delete room: ' + err.message);
+      alert('Could not delete room: ' + (err.response?.data?.error || err.message));
     }
   };
 
   const turnAllOff = async () => {
     const activeRoomsOn = rooms.filter(r => (r.relay_status === 'ON' || r.status === 'ON'));
     if (activeRoomsOn.length === 0) return;
-    await Promise.all(activeRoomsOn.map(room => toggleRelay(room)));
+    for (const room of activeRoomsOn) {
+      await toggleRelay(room);
+    }
   };
 
   if (loading) return (
@@ -67,7 +91,7 @@ export default function RoomsPage() {
 
   return (
     <div>
-      {/* Clean Header Without Token Bar */}
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
         <div>
           <h1 style={{ fontSize: '20px', fontWeight: '700' }}>Room Control</h1>
@@ -124,15 +148,15 @@ export default function RoomsPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                 <div>
                   <div style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-1)' }}>
-                    {room.name || `Room (${room.id.replace('room_', '')})`}
+                    {room.name || `Room ${room.id?.replace('room_', '') || 'Unknown'}`}
                   </div>
-                  <div style={{ fontSize:  '11px', color: room.occupied ? 'var(--teal)' : 'var(--text-3)', marginTop: '4px' }}>
+                  <div style={{ fontSize: '11px', color: room.occupied ? 'var(--teal)' : 'var(--text-3)', marginTop: '4px' }}>
                     {room.occupied ? '● Occupied' : '○ Empty'}
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  {/* Relay status toggle option */}
+                  {/* Relay status toggle button */}
                   <button
                     onClick={() => toggleRelay(room)}
                     disabled={!!toggling[room.id]}
@@ -150,12 +174,17 @@ export default function RoomsPage() {
                     {toggling[room.id] ? '...' : isCurrentOn ? 'ON' : 'OFF'}
                   </button>
 
-                  {/* ❌ DELETE ROOM ACTION BUTTON */}
+                  {/* Delete button */}
                   <button
                     onClick={() => deleteRoom(room.id)}
                     style={{
-                      background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
-                      color: '#f87171', borderRadius: '6px', padding: '5px 8px', cursor: 'pointer', fontSize: '11px'
+                      background: 'rgba(239,68,68,0.1)',
+                      border: '1px solid rgba(239,68,68,0.2)',
+                      color: '#f87171',
+                      borderRadius: '6px',
+                      padding: '5px 8px',
+                      cursor: 'pointer',
+                      fontSize: '11px'
                     }}
                     title="Delete Room"
                   >
@@ -192,14 +221,13 @@ export default function RoomsPage() {
         })}
       </div>
 
-      <AddRoomCard />
-
+      <AddRoomCard fetchRooms={fetchRooms} />
     </div>
   );
 }
 
-// here is where ae add Rooms for the business created
-function AddRoomCard() {
+// ── Add Room Component ──
+function AddRoomCard({ fetchRooms }) {
   const [open,    setOpen]    = useState(false);
   const [saving,  setSaving]  = useState(false);
   const [msg,     setMsg]     = useState('');
@@ -208,22 +236,30 @@ function AddRoomCard() {
   });
 
   const submit = async () => {
-    if (!form.name || !form.relay_id) { setMsg('Name and relay ID are required'); return; }
+    if (!form.name || !form.relay_id) { 
+      setMsg('Name and relay ID are required'); 
+      return; 
+    }
     setSaving(true);
     try {
-      await api.post('/api/business/rooms', form);
-      setMsg('Room created successfully! Refresh the Rooms page.');
+      // ✅ FIXED: Use /api/rooms instead of /api/business/rooms
+      await api.post('/api/rooms', form);
+      setMsg('✅ Room created successfully! Refreshing...');
       setForm({ name: '', relay_id: 'relay_1', device_type: 'lights', auto_shutdown: true });
-      setTimeout(() => setOpen(false), 2000);
+      if (fetchRooms) fetchRooms();
+      setTimeout(() => {
+        setOpen(false);
+        setMsg('');
+      }, 2000);
     } catch (err) {
-      setMsg('Failed: ' + (err.response?.data?.error || err.message));
+      setMsg('❌ Failed: ' + (err.response?.data?.error || err.message));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="card">
+    <div className="card" style={{ marginTop: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: open ? '20px' : '0' }}>
         <div>
           <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--teal)' }}>
@@ -247,9 +283,9 @@ function AddRoomCard() {
           {msg && (
             <div style={{
               padding: '10px 14px', borderRadius: 'var(--r-md)', marginBottom: '16px',
-              background: msg.includes('success') ? 'rgba(29,158,117,0.1)' : 'rgba(216,90,48,0.1)',
-              color: msg.includes('success') ? 'var(--teal)' : 'var(--coral)',
-              border: `1px solid ${msg.includes('success') ? 'var(--teal)' : 'var(--coral)'}`,
+              background: msg.includes('✅') ? 'rgba(29,158,117,0.1)' : 'rgba(216,90,48,0.1)',
+              color: msg.includes('✅') ? 'var(--teal)' : 'var(--coral)',
+              border: `1px solid ${msg.includes('✅') ? 'var(--teal)' : 'var(--coral)'}`,
               fontSize: '13px',
             }}>
               {msg}
@@ -323,4 +359,3 @@ function AddRoomCard() {
     </div>
   );
 }
-

@@ -2,23 +2,25 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import api from '../api/axiosConfig';
+import { provisionApi } from '../api/provisionApi';
+import { SetupCodeModal } from '../components/SetupCodeModal';
 
 export default function LoginPage() {
-  const [mode, setMode] = useState('login');  // 'login' or 'register'
-  const [step, setStep] = useState(1);       
+  const [mode, setMode] = useState('login');
+  const [step, setStep] = useState(1);
   
-  // Step 1 Fields: User Info
+  // Step 1 Fields
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   
-  // Step 2 Fields: Business Info
+  // Step 2 Fields
   const [bizName, setBizName] = useState('');
   const [business_type, setBusiness_type] = useState('');
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
 
-  //Step 3 Field: device Infor
+  // Step 3 Fields
   const [devicename, setDeviceName] = useState('');
 
   // Status indicators
@@ -26,10 +28,19 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // ── Setup Code Modal State ──
+  const [showSetupModal, setShowSetupModal] = useState(false);
+  const [setupData, setSetupData] = useState({
+    deviceName: '',
+    deviceId: '',
+    setupCode: '',
+    businessId: ''
+  });
+
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  // ── Unified Styles matching current design palette ──
+  // ── Styles ──
   const inputStyle = {
     width: '100%',
     padding: '12px 16px',
@@ -73,7 +84,6 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Incorrect Credentials');
@@ -82,21 +92,17 @@ export default function LoginPage() {
     }
   };
 
-  // ── Wizard Step Navigation Validation ──
+  // ── Wizard Step Navigation ──
   const nextStep = () => {
     setError('');
     if (step === 1) {
-
       if (!name.trim() || !email.trim() || !password) return setError('User Information is Required.');
-      if (password.length < 8) return setError('Password must be at least 8 characters (Symbole, letter, number)');
+      if (password.length < 8) return setError('Password must be at least 8 characters');
       setStep(2);
     } else if(step === 2){
-      if (!bizName.trim() || !business_type.trim() || !location.trim()) return setError('Business name, type, and location are required to complete setup.');
+      if (!bizName.trim() || !business_type.trim() || !location.trim()) return setError('Business name, type, and location are required.');
       setStep(3);
-
     }
-
-
   };
 
   const prevStep = () => {
@@ -117,7 +123,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Step 1: Create the business dynamically
+      // Step 1: Create business
       const generatedBizId = 'biz_' + Date.now();
       await api.post('/api/business/create', {
         business_id: generatedBizId,
@@ -129,7 +135,7 @@ export default function LoginPage() {
         business_type: business_type.trim(),
       });
 
-      // Step 2: Create user linked to that business
+      // Step 2: Create user
       await api.post('/api/auth/register', {
         name: name.trim(),
         email: email.trim(),
@@ -137,26 +143,41 @@ export default function LoginPage() {
         business_id: generatedBizId,
       });
 
-
-      //step 3 Create device
-
+      // Step 3: Login to get token (needed for generating setup code)
+      await login(email, password);
+      
+      // Step 4: Create device
       const generatedDeviceId = 'dev_' + Date.now();
-
       await api.post('/api/device/NewDevice', {
         deviceId: generatedDeviceId,
         businessId: generatedBizId,
         name: devicename
-      })
+      });
 
-      setSuccess('Account and business environment configured successfully! Sign in now.');
-      setMode('login');
-      setStep(1);
+      // ── Generate setup code automatically ──
+      const setupResult = await provisionApi.generateSetupCode(generatedDeviceId);
       
-      // Clear Inputs cleanly
-      setPassword(''); setName(''); setEmail(''); setBizName('');
-      setPhone(''); setLocation(''); setBusiness_type(''); 
+      // ── Show setup code modal ──
+      setSetupData({
+        deviceName: devicename,
+        deviceId: generatedDeviceId,
+        setupCode: setupResult.setup_code,
+        businessId: generatedBizId
+      });
+      setShowSetupModal(true);
       
+      setSuccess('Account created successfully! Your ESP32 is ready to be configured.');
+
+      // Clear form fields
+      setPassword(''); 
+      setName(''); 
+      setEmail(''); 
+      setBizName('');
+      setPhone(''); 
+      setLocation(''); 
+      setBusiness_type(''); 
       setDeviceName('');
+      
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data?.error || 'Registration failed. Try again.');
     } finally {
@@ -164,31 +185,45 @@ export default function LoginPage() {
     }
   };
 
+  // ── Handle Setup Modal Close - Navigate to Success Page ──
+  const handleSetupModalClose = () => {
+    setShowSetupModal(false);
+    // Navigate to the success page with the device data
+    navigate('/registration-success', { 
+      state: {
+        deviceName: setupData.deviceName,
+        deviceId: setupData.deviceId,
+        setupCode: setupData.setupCode,
+        businessId: setupData.businessId
+      }
+    });
+  };
+
   return (
-  <div style={{
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    minHeight: '100vh',
-    width: '100vw',
-    background: '#0e1b29',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '20px',
-    fontFamily: 'Arial, sans-serif',
-    boxSizing: 'border-box',
-    overflowY: 'auto'
-  }}>
-    <div style={{ 
-      width: '100%', 
-      maxWidth: '400px',
-      margin: 'auto', 
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      minHeight: '100vh',
+      width: '100vw',
+      background: '#0e1b29',
       display: 'flex',
-      flexDirection: 'column'
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '20px',
+      fontFamily: 'Arial, sans-serif',
+      boxSizing: 'border-box',
+      overflowY: 'auto'
     }}>
+      <div style={{ 
+        width: '100%', 
+        maxWidth: '400px',
+        margin: 'auto', 
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
         {/* ── Header Branding ── */}
         <div style={{ textAlign: 'center', marginBottom: '24px', width: '100%' }}>
           <svg width="45" height="70" viewBox="0 0 24 38" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginBottom: '12px', display: 'inline-block' }}>
@@ -239,11 +274,9 @@ export default function LoginPage() {
             ))}
           </div>
 
-          {/* ── Step Indicators for Progress Tracking ── */}
+          {/* ── Step Indicators ── */}
           {mode === 'register' && (
-            
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '0 32px' }}>
-
               {[1, 2, 3].map((s) => (
                 <div key={s} style={{ display: 'flex', alignItems: 'center', flex: s !== 3 ? 1 : 'none' }}>
                   <div style={{
@@ -260,11 +293,11 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* ── Notification Feedback Banners ── */}
+          {/* ── Notification Banners ── */}
           {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', borderRadius: '6px', padding: '10px', marginBottom: '16px', fontSize: '13px', color: '#f87171', textAlign: 'left' }}>{error}</div>}
           {success && <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid #10b981', borderRadius: '6px', padding: '10px', marginBottom: '16px', fontSize: '13px', color: '#34d399', textAlign: 'left' }}>{success}</div>}
 
-          {/* ── Conditional Authentication Context Interface ── */}
+          {/* ── Login Form ── */}
           {mode === 'login' ? (
             <form onSubmit={handleLogin}>
               <div>
@@ -282,7 +315,7 @@ export default function LoginPage() {
           ) : (
             <form onSubmit={handleRegister}>
               
-              {/* Step 1: User Account Credentials */}
+              {/* Step 1: Personal Information */}
               {step === 1 && (
                 <div>
                   <h3 style={{ color: '#ffffff', fontSize: '15px', margin: '0 0 4px', textAlign: 'center' }}>Personal Information</h3>
@@ -303,7 +336,7 @@ export default function LoginPage() {
                 </div>
               )}
 
-              {/* Step 2: Commercial Business Configuration */}
+              {/* Step 2: Business Profile */}
               {step === 2 && (
                 <div>
                   <h3 style={{ color: '#ffffff', fontSize: '15px', margin: '0 0 4px', textAlign: 'center' }}>Business Profile</h3>
@@ -329,20 +362,21 @@ export default function LoginPage() {
                   </div>
                 </div>
               )}
+
+              {/* Step 3: Device Profile */}
               {step === 3 && (
                 <div>
-                   <h3 style={{ color: '#ffffff', fontSize: '15px', margin: '0 0 4px', textAlign: 'center' }}>Device Profile</h3>
+                  <h3 style={{ color: '#ffffff', fontSize: '15px', margin: '0 0 4px', textAlign: 'center' }}>Device Profile</h3>
 
-                   <label style={{ ...labelStyle, marginTop: '0px' }}>device name</label>
-                   <input type="text" value={devicename} onChange={e => setDeviceName(e.target.value)} placeholder="ESP32..." style={inputStyle} />
+                  <label style={{ ...labelStyle, marginTop: '0px' }}>Device Name</label>
+                  <input type="text" value={devicename} onChange={e => setDeviceName(e.target.value)} placeholder="ESP32..." style={inputStyle} />
 
-                    <div style={{ display: 'flex', marginTop: '20px' }}>
+                  <div style={{ display: 'flex', marginTop: '20px' }}>
                     <button type="button" onClick={prevStep} disabled={loading} style={secondaryBtnStyle}>Back</button>
                     <button type="submit" disabled={loading} style={{ flex: 1, padding: '12px', background: '#10b981', border: 'none', borderRadius: '8px', color: '#ffffff', fontSize: '14px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
                       {loading ? 'Creating Account...' : 'Complete Registration'}
                     </button>
                   </div>
-
                 </div>
               )}
 
@@ -351,6 +385,17 @@ export default function LoginPage() {
 
         </div>
       </div>
+
+      {/* ── Setup Code Modal ── */}
+      {showSetupModal && (
+        <SetupCodeModal
+          deviceName={setupData.deviceName}
+          deviceId={setupData.deviceId}
+          setupCode={setupData.setupCode}
+          businessId={setupData.businessId}
+          onClose={handleSetupModalClose}
+        />
+      )}
     </div>
   );
 }

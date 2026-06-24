@@ -76,33 +76,33 @@ router.patch('/settings', async (req, res) => {
 });
 
 // POST /api/business/rooms — create a new room
-router.post('/rooms', async (req, res) => {
-  try {
-    const { name, device_type, relay_id, pir_gpio_pin, auto_shutdown } = req.body;
-    if (!name || !relay_id) {
-      return res.status(400).json({ error: 'name and relay_id are required' });
-    }
-    const roomService = require('../services/roomService');
-    const deviceService = require('../services/deviceService');
+// router.post('/rooms', async (req, res) => {
+//   try {
+//     const { name, device_type, relay_id, pir_gpio_pin, auto_shutdown } = req.body;
+//     if (!name || !relay_id) {
+//       return res.status(400).json({ error: 'name and relay_id are required' });
+//     }
+//     const roomService = require('../services/roomService');
+//     const deviceService = require('../services/deviceService');
 
-    // Get first device for this business
-    const devices = await deviceService.getDevicesByBusiness(req.user.businessId);
-    const deviceId = devices.length > 0 ? devices[0].id : 'device_BUEA001';
+//     // Get first device for this business
+//     const devices = await deviceService.getDevicesByBusiness(req.user.businessId);
+//     const deviceId = devices.length > 0 ? devices[0].id : 'device_BUEA001';
 
-    const roomId = `room_${Date.now()}`;
-    await roomService.createRoom(req.user.businessId, roomId, {
-      device_id:     deviceId,
-      name,
-      relay_id,
-      device_type:   device_type,
-      auto_shutdown: auto_shutdown ?? true,
-      pir_gpio_pin:  pir_gpio_pin || null,
-    });
+//     const roomId = `room_${Date.now()}`;
+//     await roomService.createRoom(req.user.businessId, roomId, {
+//       device_id:     deviceId,
+//       name,
+//       relay_id,
+//       device_type:   device_type,
+//       auto_shutdown: auto_shutdown ?? true,
+//       pir_gpio_pin:  pir_gpio_pin || null,
+//     });
 
-    return res.status(201).json({ message: 'Room created', roomId });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
+//     return res.status(201).json({ message: 'Room created', roomId });
+//   } catch (err) {
+//     return res.status(500).json({ error: err.message });
+//   }
+// });
 
 module.exports = router;

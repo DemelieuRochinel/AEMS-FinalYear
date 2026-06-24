@@ -7,6 +7,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider} from './context/AuthContext';
 import { useAuth } from './hooks/useAuth';
+import { ESP32SetupPage } from './pages/ESP32SetupPage';
 
 import LoginPage     from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -15,6 +16,10 @@ import AlertsPage    from './pages/AlertsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import SettingsPage  from './pages/SettingsPage';
 import Layout        from './components/layout/Layout';
+
+// ── NEW IMPORTS ──
+import { RegistrationSuccess } from './pages/RegistrationSuccess';
+import { DeviceManagement } from './pages/DeviceManagement';
 
 import './App.css';
 
@@ -48,10 +53,15 @@ function App() {
       <BrowserRouter>
         <Routes>
 
-          {/* Public route */}
+          {/* ── Public Routes ── */}
           <Route path="/login" element={<LoginPage />} />
+          
+          {/* ── NEW: Registration Success Page (Public) ── */}
+          <Route path="/registration-success" element={<RegistrationSuccess />} />
 
-          {/* Protected routes — all inside Layout (sidebar + topbar) */}
+          <Route path="/setup-esp32" element={<ESP32SetupPage />} />
+
+          {/* ── Protected routes — all inside Layout (sidebar + topbar) ── */}
           <Route path="/" element={
             <ProtectedRoute>
               <Layout />
@@ -62,6 +72,9 @@ function App() {
             <Route path="alerts" element={<AlertsPage />}    />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="settings"  element={<SettingsPage />}  />
+            
+            {/* ── NEW: Device Management Page (Protected) ── */}
+            <Route path="devices" element={<DeviceManagement />} />
           </Route>
 
           {/* Catch all */}

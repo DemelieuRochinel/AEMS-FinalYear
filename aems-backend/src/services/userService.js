@@ -9,7 +9,6 @@ const ROLES = {
   TECHNICIAN: 'Technician',
 };
 
-
 const createUser = async (userId, data) => {
   try {
     // Hash the password before saving — NEVER store plain text
@@ -20,7 +19,7 @@ const createUser = async (userId, data) => {
       email:         data.email.toLowerCase().trim(),
       phone:         data.phone      || null,
       password_hash: hashedPassword,
-      role:          data.role       || ROLES.STAFF, 
+      role:          data.role       || ROLES.OWNER,  // ✅ FIXED
       business_id:   data.business_id || null,
       business_ids:  data.business_ids|| [],
       language:      data.language    || 'eng',
@@ -34,7 +33,7 @@ const createUser = async (userId, data) => {
         daily_summary:  data.notifications?.daily_summary ?? true,
       },
 
-      permissions: buildPermissions(data.role || ROLES.STAFF),
+      permissions: buildPermissions(data.role || ROLES.OWNER),  // ✅ FIXED
     };
 
     await usersRef.child(userId).set(userData);
@@ -101,7 +100,6 @@ const getUserById = async (userId) => {
   }
 };
 
-
 const getUserByEmail = async (email) => {
   try {
     const snapshot = await usersRef
@@ -124,7 +122,6 @@ const getUserByEmail = async (email) => {
   }
 };
 
-
 const authenticateUser = async (email, password) => {
   try {
     const user = await getUserByEmail(email);
@@ -146,7 +143,8 @@ const authenticateUser = async (email, password) => {
     console.error('authenticateUser error:', error.message);
     throw new Error(`Authentication failed: ${error.message}`);
   }
-}; 
+};
+
 module.exports = {
   ROLES,
   createUser,

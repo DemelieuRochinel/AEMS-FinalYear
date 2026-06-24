@@ -70,6 +70,23 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    const fetchRooms = async () => {
+      try {
+        const response = await api.get('/api/rooms');
+        setRooms(response.data.rooms || []);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchRooms();
+
+    const interval = setInterval(fetchRooms, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     if (!liveReading?.data?.main) return;
     const m = liveReading.data.main;
     setChartData(prev => [...prev.slice(-79), {
@@ -177,7 +194,7 @@ export default function DashboardPage() {
       )}
 
       {/* Chart + Rooms Panel Layout Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'window' !== typeof window && window.innerWidth < 900 ? '1fr' : '1fr 280px', gap: '20px' }} className="mb-24">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '20px' }} className="mb-24">
 
         {/* Chart Component Panel */}
         <div className="card" style={{ padding: '22px' }}>
@@ -230,7 +247,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Room Breakdowns Segment */}
+        {/* Room Breakdowns Segment - SINGLE CORRECT VERSION */}
         <div className="card" style={{ padding: '22px' }}>
           <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-2)', marginBottom: '18px' }}>
             Room Status
@@ -247,8 +264,9 @@ export default function DashboardPage() {
                 border: `1px solid ${room.occupied ? 'rgba(29,158,117,0.2)' : 'var(--border)'}`,
               }}>
                 <div>
+                  {/* ✅ FIXED: Correctly displays room name or fallback */}
                   <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-1)' }}>
-                    {rooms.name} 
+                    {room.name || `Room ${room.id?.replace('room_', '') || 'Unknown'}`}
                   </div>
                   <div style={{
                     fontSize: '10px',
@@ -266,7 +284,7 @@ export default function DashboardPage() {
                   background: room.relay_status === 'ON' ? 'rgba(29,158,117,0.15)' : 'rgba(71,85,105,0.2)',
                   color: room.relay_status === 'ON' ? 'var(--teal)' : 'var(--text-2)',
                 }}>
-                  {room.relay_status}
+                  {room.relay_status || 'OFF'}
                 </div>
               </div>
             )) : (

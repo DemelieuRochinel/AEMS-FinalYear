@@ -15,6 +15,7 @@ const schedulerService = require('./src/services/schedulerService');
 const emailService     = require('./src/services/emailService');
 const businessRoutes = require('./src/routes/businessRoutes');
 const devicesRoute   = require("./src/routes/devicesRoute");
+const provisioningRoutes = require('./src/routes/provisioningRoutes'); 
 
 // console.log('Checking import:', devicesRoute);
 
@@ -85,6 +86,7 @@ app.use('/api/alerts',   alertsRoutes);
 app.use('/api/bill',     billRoutes);
 app.use('/api/business', businessRoutes);
 app.use('/api/device',   devicesRoute);
+app.use('/api/provision', provisioningRoutes); 
 
 
 //404 handler
