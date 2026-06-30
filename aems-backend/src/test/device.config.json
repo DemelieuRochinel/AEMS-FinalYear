@@ -1,7 +1,9 @@
 {
-  "device_id": "dev_1782302214999",
-  "business_id": "biz_1782302213419",
-  "provisioned_at": "2026-06-24T11:57:50.642Z",
+  "device_id": "dev_48eecf49-f9ec-4018-a6a3-b1985e91fc7d",
+  "business_id": "biz_a1c81dd7-3cd4-47da-818e-348dd8972d19",
+  "provisioned_at": "2026-06-30T13:18:31.311Z",
   "provisioned": true,
-  "claimed_at": "2026-06-24T11:57:50.641Z"
+  "broker_url": "mqtt://localhost:1883",
+  "claimed_at": "2026-06-30T13:18:31.311Z",
+  "simulated": true
 }

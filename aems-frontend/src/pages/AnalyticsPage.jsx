@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../api/axiosConfig';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
 } from 'recharts';
 
@@ -184,7 +184,7 @@ export default function AnalyticsPage() {
                       borderRadius: '8px',
                       color:        '#fff',
                     }}
-                    formatter={(value, name) => [
+                    formatter={(value) => [
                       `${value} kWh`,
                       'Consumption'
                     ]}

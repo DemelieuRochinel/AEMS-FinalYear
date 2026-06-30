@@ -1,9 +1,67 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
 const provisioningService = require('../services/provisioningService');
 const { authenticate } = require('../middleware/authentication');
 const deviceService = require('../services/deviceService');
+const roomService = require('../services/roomService');
 const db = require('../config/firebase');
+
+const writeSimulatorConfig = (result) => {
+  const simulatorConfigPath = path.join(__dirname, '../test/device.config.json');
+  const brokerUrl = result.mqtt_broker
+    ? `mqtt://${result.mqtt_broker}:${result.mqtt_port || 1883}`
+    : undefined;
+
+  const config = {
+    device_id: result.device_id,
+    business_id: result.business_id,
+    provisioned_at: new Date().toISOString(),
+    provisioned: true,
+    ...(brokerUrl ? { broker_url: brokerUrl } : {}),
+    claimed_at: new Date().toISOString(),
+    simulated: true,
+  };
+
+  fs.writeFileSync(simulatorConfigPath, JSON.stringify(config, null, 2));
+  return simulatorConfigPath;
+};
+
+const emitClaimedDeviceStatus = (req, result) => {
+  const io = req.app.get('io');
+  if (!io) return;
+
+  io.emit('device_status', {
+    deviceId: result.device_id,
+    businessId: result.business_id,
+    status: 'online',
+    timestamp: new Date().toISOString(),
+  });
+};
+
+const ensureDefaultRoomsForDevice = async (businessId, deviceId) => {
+  const defaults = [
+    // { relay_id: 'relay_1', name: 'Bed room (Lighting)', device_type: 'lights' },
+    // { relay_id: 'relay_2', name: 'Relay 2 (Machine)', device_type: 'machine' },
+    // { relay_id: 'relay_3', name: 'Relay 3', device_type: 'lights' },
+    // { relay_id: 'relay_4', name: 'Relay 4', device_type: 'socket' },
+  ];
+
+  for (const room of defaults) {
+    const existing = await roomService.getRoomByRelay(businessId, deviceId, room.relay_id);
+    if (existing) continue;
+
+    await roomService.createRoom(businessId, `room_${deviceId}_${room.relay_id}`, {
+      device_id: deviceId,
+      name: room.name,
+      relay_id: room.relay_id,
+      device_type: room.device_type,
+      floor: 'Main floor',
+      auto_shutdown: true,
+    });
+  }
+};
 
 // =============================================
 // 1. GENERATE SETUP CODE (Protected)
@@ -111,13 +169,19 @@ router.post('/claim-device', async (req, res) => {
       });
     }
 
+    emitClaimedDeviceStatus(req, result);
+    // await ensureDefaultRoomsForDevice(result.business_id, result.device_id);
+
+
     // Success - return configuration to ESP32
     return res.status(200).json({
       success: true,
       device_id: result.device_id,
       business_id: result.business_id,
+      mqtt_broker: result.mqtt_broker,
+      mqtt_port: result.mqtt_port,
       message: result.message,
-      configuration: result.configuration
+      configuration: result.configuration,
     });
 
   } catch (error) {
@@ -125,6 +189,66 @@ router.post('/claim-device', async (req, res) => {
     return res.status(500).json({
       error: 'CLAIM_FAILED',
       message: `Internal server error: ${error.message}`
+    });
+  }
+});
+
+// =============================================
+// 2b. CLAIM DEVICE FOR LOCAL ESP32 SIMULATOR
+// POST /api/provision/claim-simulated-device
+// =============================================
+router.post('/claim-simulated-device', async (req, res) => {
+  try {
+    const { setup_code } = req.body;
+
+    if (!setup_code || !/^\d{6}$/.test(setup_code)) {
+      return res.status(400).json({
+        error: 'INVALID_FORMAT',
+        message: 'Setup code must be exactly 6 digits'
+      });
+    }
+
+    const result = await provisioningService.claimDevice(
+      setup_code,
+      'SIMULATED-ESP32',
+      'simulator-1.0.0'
+    );
+
+    if (!result.success) {
+      const statusMap = {
+        'INVALID_CODE': 404,
+        'CODE_EXPIRED': 400,
+        'CODE_USED': 400,
+        'DEVICE_NOT_FOUND': 404,
+        'CLAIM_FAILED': 500
+      };
+
+      return res.status(statusMap[result.error] || 400).json({
+        error: result.error,
+        message: result.message,
+        device_id: result.device_id || null
+      });
+    }
+
+    const simulator_config_path = writeSimulatorConfig(result);
+    emitClaimedDeviceStatus(req, result);
+    // await ensureDefaultRoomsForDevice(result.business_id, result.device_id);
+
+    return res.status(200).json({
+      success: true,
+      device_id: result.device_id,
+      business_id: result.business_id,
+      mqtt_broker: result.mqtt_broker,
+      mqtt_port: result.mqtt_port,
+      simulator_config_path,
+      message: 'Simulated ESP32 linked. Restart the simulator to stream live readings.',
+      configuration: result.configuration,
+    });
+  } catch (error) {
+    console.error('Claim simulated device error:', error.message);
+    return res.status(500).json({
+      error: 'SIMULATOR_CLAIM_FAILED',
+      message: error.message
     });
   }
 });
@@ -272,6 +396,72 @@ router.post('/validate-code', async (req, res) => {
     return res.status(500).json({
       error: 'VALIDATION_FAILED',
       message: error.message
+    });
+  }
+});
+
+// =============================================
+// 6. GET PROVISIONING STATUS (Protected)
+// GET /api/provision/status/:deviceId
+// =============================================
+router.get('/status/:deviceId', authenticate, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    const businessId = req.user.businessId;
+
+    const device = await deviceService.getDeviceById(deviceId);
+    if (!device) {
+      return res.status(404).json({
+        error: 'DEVICE_NOT_FOUND',
+        message: 'Device not found',
+      });
+    }
+
+    if (device.business_id !== businessId) {
+      return res.status(403).json({
+        error: 'UNAUTHORIZED',
+        message: 'Device does not belong to your business',
+      });
+    }
+
+    const result = await provisioningService.getDeviceProvisionStatus(deviceId);
+    if (!result.success) {
+      return res.status(404).json(result);
+    }
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Get provision status error:', error.message);
+    return res.status(500).json({
+      error: 'STATUS_FETCH_FAILED',
+      message: error.message,
+    });
+  }
+});
+
+// =============================================
+// 7. RESET DEVICE PROVISIONING (Protected)
+// POST /api/provision/reset-device/:deviceId
+// =============================================
+router.post('/reset-device/:deviceId', authenticate, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    const businessId = req.user.businessId;
+
+    const result = await provisioningService.resetDeviceProvisioning(deviceId, businessId);
+    if (!result.success) {
+      const statusCode = result.error === 'DEVICE_NOT_FOUND' ? 404
+        : result.error === 'UNAUTHORIZED' ? 403
+        : 400;
+      return res.status(statusCode).json(result);
+    }
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Reset device error:', error.message);
+    return res.status(500).json({
+      error: 'RESET_FAILED',
+      message: error.message,
     });
   }
 });

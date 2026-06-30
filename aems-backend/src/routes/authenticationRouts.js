@@ -3,6 +3,7 @@ const jwt         = require('jsonwebtoken');
 const router      = express.Router();
 const userService = require('../services/userService');
 const { authenticate } = require('../middleware/authentication');
+const { randomUUID } = require('crypto');
 
 // Helper — generate JWT token
 const generateToken = (user) => {
@@ -116,7 +117,7 @@ router.post('/register', async (req, res) => {
     }
 
     // Create user - ✅ FIXED: Use ROLES.OWNER
-    const userId  = `user_${Date.now()}`;
+    const userId  = `user_${randomUUID()}`;
     const created = await userService.createUser(userId, {
       name,
       email,

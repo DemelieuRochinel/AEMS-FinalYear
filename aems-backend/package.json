@@ -10,11 +10,10 @@
     "init-firebase": "node src/scripts/initializeFirebase.js",
     "test-provisioning": "node src/test/testProvisioning.js",
     "simulate-esp32": "node src/test/simulateESP32.js",
-       "cleanup-all": "node src/scripts/cleanupAllData.js",
+    "cleanup-all": "node src/scripts/cleanupAllData.js",
     "cleanup-business": "node src/scripts/cleanupBusiness.js",
     "fix-room-names": "node src/scripts/fixRoomNames.js",
     "fix-relay-status": "node src/scripts/fixRelayStatus.js"
-
   },
   "dependencies": {
     "axios": "^1.18.1",

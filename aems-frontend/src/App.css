@@ -4,7 +4,7 @@
   --bg-base:    #0a1628;
   --bg-panel:   #0f2035;
   --bg-card:    #132436;
-  --bg-input:   #0d1b2a;
+  --bg-input:   #1a2f45;
   --border:     rgba(255,255,255,0.07);
   --border-md:  rgba(255,255,255,0.12);
   --teal:       #1D9E75;
@@ -77,8 +77,13 @@ body {
   font-size:    14px;
   outline:      none;
   transition:   border-color 0.15s;
+  color-scheme: dark;
 }
 .form-input:focus { border-color: var(--teal); }
+.form-input[type="time"]::-webkit-calendar-picker-indicator,
+.form-input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.75);
+}
 
 /* Buttons */
 .btn {
@@ -158,3 +163,14 @@ body {
 .mb-24 { margin-bottom: 24px; }
 .mt-8  { margin-top: 8px; }
 .mt-16 { margin-top: 16px; }
+
+.dashboard-split {
+  display: grid;
+  grid-template-columns: 1fr 580px;
+  gap: 20px;
+}
+@media (max-width: 900px) {
+  .dashboard-split {
+    grid-template-columns: 1fr;
+  }
+} 

@@ -1,122 +1,166 @@
-const express   = require('express');
-const http      = require('http');
-const socketIo  = require('socket.io');
-const cors      = require('cors');
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
+const cors = require('cors');
 require('dotenv').config();
 
+// Initialize Firebase
+require('./src/config/firebase');
 
-//Initialize Firebase first (before anything else)
-const db = require('./src/config/firebase');
-
-//Import MQTT and the Automated Engine of the system in the  service 
+// Services
 const mqttService = require('./src/services/mqttService');
 const automationEngine = require('./src/services/automationEngine');
 const schedulerService = require('./src/services/schedulerService');
-const emailService     = require('./src/services/emailService');
+const emailService = require('./src/services/emailService');
+
+// Routes
+const authenticationRoutes = require('./src/routes/authenticationRouts');
+const readingsRoutes = require('./src/routes/readingsRoutes');
+const roomsRoutes = require('./src/routes/roomsRoutes');
+const alertsRoutes = require('./src/routes/alertsRoutes');
+const billRoutes = require('./src/routes/billRoutes');
 const businessRoutes = require('./src/routes/businessRoutes');
-const devicesRoute   = require("./src/routes/devicesRoute");
-const provisioningRoutes = require('./src/routes/provisioningRoutes'); 
+const devicesRoute = require('./src/routes/devicesRoute');
+const provisioningRoutes = require('./src/routes/provisioningRoutes');
 
-// console.log('Checking import:', devicesRoute);
-
-
-
-//Create Express app and HTTP server
-const app    = express();
+const app = express();
 const server = http.createServer(app);
 
-//Configure Socket.io (WebSocket)
-const io = socketIo(server, {
-  cors: {
-    origin: [
-      'http://localhost:5173',
-      'http://localhost:3000',
-      process.env.FRONTEND_URL,
-    ].filter(Boolean),
-    methods:     ['GET', 'POST'],
-    credentials: true,
-  },
-});
+// =====================================================
+// CORS CONFIGURATION
+// =====================================================
 
-//Global middleware
-app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    process.env.FRONTEND_URL,
-  ].filter(Boolean),
-  methods:     ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  credentials: true,
-}));
+const configuredOrigins =
+  process.env.CORS_ORIGINS ||
+  process.env.FRONTEND_URL ||
+  '';
+
+const allowedOrigins = configuredOrigins
+  ? configuredOrigins
+      .split(',')
+      .map(origin => origin.trim())
+      .filter(Boolean)
+  : [];
+
+console.log('Allowed Origins:', allowedOrigins);
+
+// =====================================================
+// EXPRESS CORS
+// =====================================================
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // allow Postman, curl, mobile apps
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.error('Blocked by CORS:', origin);
+
+      return callback(
+        new Error(`Origin ${origin} not allowed by CORS`)
+      );
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  })
+);
+
+// Handle browser preflight requests
+// app.options('*', cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-//Make io accessible in routes and controllers
+// =====================================================
+// SOCKET.IO
+// =====================================================
+
+const io = socketIo(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+});
+
 app.set('io', io);
 
-// Health check endpoint
+// =====================================================
+// HEALTH CHECK
+// =====================================================
+
 app.get('/api/health', (req, res) => {
   res.json({
-    status:        'running',
-    projec:         'Automate Enegy management system',
-    environment:   process.env.NODE_ENV,
-    timestamp:     new Date().toISOString(),
-    uptime_sec:    Math.floor(process.uptime()),
+    status: 'running',
+    project: 'Automated Energy Management System',
+    environment: process.env.NODE_ENV,
+    timestamp: new Date().toISOString(),
+    uptime_sec: Math.floor(process.uptime()),
     mqtt_connected: mqttService.getIsConnected(),
     automation_engine: automationEngine.getStatus(),
-    automation_engine: automationEngine.getStatus(),
-    scheduler:         schedulerService.getStatus(),
+    scheduler: schedulerService.getStatus(),
   });
 });
 
-// Import all route files
-const authenticationRoutes  = require('./src/routes/authenticationRouts');
-const readingsRoutes = require('./src/routes/readingsRoutes');
-const roomsRoutes    = require('./src/routes/roomsRoutes');
-const alertsRoutes   = require('./src/routes/alertsRoutes');
-const billRoutes     = require('./src/routes/billRoutes');
+// =====================================================
+// ROUTES
+// =====================================================
 
-
-// Register routes with base paths
-app.use('/api/auth',     authenticationRoutes);
+app.use('/api/auth', authenticationRoutes);
 app.use('/api/readings', readingsRoutes);
-app.use('/api/rooms',    roomsRoutes);
-app.use('/api/alerts',   alertsRoutes);
-app.use('/api/bill',     billRoutes);
+app.use('/api/rooms', roomsRoutes);
+app.use('/api/alerts', alertsRoutes);
+app.use('/api/bill', billRoutes);
 app.use('/api/business', businessRoutes);
-app.use('/api/device',   devicesRoute);
-app.use('/api/provision', provisioningRoutes); 
+app.use('/api/device', devicesRoute);
+app.use('/api/provision', provisioningRoutes);
 
+// =====================================================
+// 404
+// =====================================================
 
-//404 handler
 app.use((req, res) => {
   res.status(404).json({
-    error:  'Route not found',
-    path:   req.originalUrl,
+    error: 'Route not found',
+    path: req.originalUrl,
     method: req.method,
   });
 });
 
-//Global error handler 
+// =====================================================
+// GLOBAL ERROR HANDLER
+// =====================================================
+
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err.message);
+  console.error('Unhandled error:', err);
+
   res.status(500).json({
-    error:   'Internal server error',
-    message: process.env.NODE_ENV === 'development'
-      ? err.message
-      : 'Something went wrong',
+    error: 'Internal server error',
+    message:
+      process.env.NODE_ENV === 'development'
+        ? err.message
+        : 'Something went wrong',
   });
 });
 
-//WebSocket connection handler
+// =====================================================
+// SOCKET EVENTS
+// =====================================================
+
 io.on('connection', (socket) => {
   console.log(`Dashboard connected: ${socket.id}`);
 
-  // Handle relay control commands from dashboard
   socket.on('control_device', (command) => {
-    console.log('Control command from dashboard:', command);
-    mqttService.publishCommand(command.device_id, command);
+    console.log('Control command:', command);
+
+    mqttService.publishCommand(
+      command.device_id,
+      command
+    );
   });
 
   socket.on('disconnect', () => {
@@ -124,20 +168,25 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start server
+// =====================================================
+// START SERVER
+// =====================================================
+
 const PORT = process.env.PORT || 5000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
 
-server.listen(PORT, () => {
-
-  //Initialize MQTT AFTER server starts
   mqttService.initialize(io);
-
-  const automationEngine = require('./src/services/automationEngine');
   automationEngine.initialize(io);
 
   schedulerService.initialize();
   emailService.verifyConfiguration();
+
+  console.log('Backend initialized successfully');
 });
 
-// Export the server, app and the io to the othere module.
-module.exports = { app, server, io };
+module.exports = {
+  app,
+  server,
+  io,
+};

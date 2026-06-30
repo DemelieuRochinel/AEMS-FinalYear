@@ -6,8 +6,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
-
-const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { API_BASE_URL } from '../config/apiBase';
 
 export const useSocket = () => {
   const socketRef    = useRef(null);
@@ -18,7 +17,7 @@ export const useSocket = () => {
   const [deviceStatus,setDeviceStatus]= useState({});
 
   useEffect(() => {
-    socketRef.current = io(BACKEND_URL, {
+    socketRef.current = io(API_BASE_URL, {
       transports: ['websocket'],
     });
 

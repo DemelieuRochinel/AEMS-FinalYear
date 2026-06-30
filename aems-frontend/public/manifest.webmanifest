@@ -1,0 +1,19 @@
+{
+  "name": "AEMS Energy Manager",
+  "short_name": "AEMS",
+  "description": "Automated Energy Management System dashboard for ESP32-powered businesses.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#071526",
+  "theme_color": "#071526",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

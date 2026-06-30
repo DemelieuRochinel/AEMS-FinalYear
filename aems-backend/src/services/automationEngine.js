@@ -21,7 +21,7 @@ const ENGINE_CONFIG = {
   cycleIntervalMs:    10 * 1000,   // ⚡ Evaluates every 10 seconds for active testing
   defaultVoltageMin:  190,         // volts — ENEO danger threshold
   defaultVoltageMax:  245,         // volts — overvoltage threshold
-  defaultShutdownMin: 15,          // minutes empty before auto-shutdown
+  defaultShutdownMin: 3,           // minutes empty before auto-shutdown
 };
 
 // Track recent alerts to prevent spam
@@ -136,9 +136,10 @@ const _ruleEmptyRoomShutdown = async (businessId, rooms, settings) => {
       const emptyMinutes = Math.round(emptyDurationMs / 60000);
       console.log(`Rule 1: ${room.name} empty ${emptyMinutes}min → shutting down`);
 
-      const devices = await deviceService.getDevicesByBusiness(businessId);
-      if (!devices || devices.length === 0) continue;
-      const device = devices[0];
+      const device = room.device_id
+        ? await deviceService.getDeviceById(room.device_id)
+        : null;
+      if (!device) continue;
 
       try {
         // FIXED: Matched action and status to what your ESP32 simulator expects
@@ -218,11 +219,12 @@ const _ruleAfterHoursShutdown = async (businessId, rooms, settings) => {
 
   console.log(`Rule 2: After hours (${closingTime}) — shutting down ${roomsStillOn.length} rooms`);
 
-  const devices = await deviceService.getDevicesByBusiness(businessId);
-  if (!devices || devices.length === 0) return;
-  const device = devices[0];
-
   for (const room of roomsStillOn) {
+    const device = room.device_id
+      ? await deviceService.getDeviceById(room.device_id)
+      : null;
+    if (!device) continue;
+
     // FIXED: Aligned payload structural parameter formatting
     mqttService.publishCommand(device.id, {
       action:      'SET_RELAY',
@@ -240,7 +242,7 @@ const _ruleAfterHoursShutdown = async (businessId, rooms, settings) => {
     type:      'after_hours_shutdown',
     severity:  'info',
     message:   `After-hours shutdown: ${roomsStillOn.length} rooms secured at ${closingTime}`,
-    device_id: device.id,
+    device_id: roomsStillOn[0]?.device_id || null,
   });
 
   _markAlertCreated(alertKey);

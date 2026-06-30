@@ -13,11 +13,19 @@ const readline = require('readline');
 const axios = require('axios'); // Make sure to install: npm install axios
 require('dotenv').config();
 
+const CLI_SETUP_CODE = (() => {
+  const idx = process.argv.indexOf('--setup-code');
+  if (idx !== -1 && process.argv[idx + 1]) {
+    return process.argv[idx + 1].replace(/\D/g, '').slice(0, 6);
+  }
+  return null;
+})();
+
 // ── Configuration ──
 const CONFIG = {
   brokerUrl: process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883',
   backendUrl: process.env.BACKEND_URL || 'http://localhost:5000/api',
-  intervalMs: 5000, // send reading every 5 seconds
+  intervalMs: 5000,
   configFile: path.join(__dirname, 'device.config.json'),
 };
 
@@ -68,6 +76,7 @@ class ConfigManager {
         business_id: businessId,
         provisioned_at: new Date().toISOString(),
         provisioned: true,
+        broker_url: configData.broker_url || CONFIG.brokerUrl,
         ...configData,
       };
       fs.writeFileSync(this.configFile, JSON.stringify(this.config, null, 2));
@@ -87,6 +96,10 @@ class ConfigManager {
   // Get business ID
   getBusinessId() {
     return this.config?.business_id || null;
+  }
+
+  getBrokerUrl() {
+    return this.config?.broker_url || CONFIG.brokerUrl;
   }
 
   // Check if provisioned
@@ -136,11 +149,21 @@ class ProvisioningService {
 
       if (response.data.success) {
         console.log('Device claimed successfully!');
+        const mqttBroker = response.data.mqtt_broker
+          || response.data.configuration?.mqtt_broker;
+        const mqttPort = response.data.mqtt_port
+          || response.data.configuration?.mqtt_port
+          || 1883;
+        const brokerUrl = mqttBroker
+          ? `mqtt://${mqttBroker}:${mqttPort}`
+          : CONFIG.brokerUrl;
+
         return {
           success: true,
           device_id: response.data.device_id,
           business_id: response.data.business_id,
           configuration: response.data.configuration,
+          broker_url: brokerUrl,
         };
       } else {
         console.error('Claim failed:', response.data.message);
@@ -202,39 +225,119 @@ class ESP32Simulator {
     this.businessId = null;
     this.client = null;
     this.interval = null;
-    this.state = this.getInitialState();
+    // this.state = this.getInitialState();
     this.configManager = new ConfigManager(CONFIG.configFile);
     this.provisioningService = new ProvisioningService(CONFIG.backendUrl);
   }
 
-  getInitialState() {
-    return {
-      energy_kwh: 0,
-      run_seconds: 0,
-      lastResetDay: null,
-      rooms: {
-        room_1: { occupied: true, name: 'Main Office' },
-        room_2: { occupied: false, name: 'Meeting Room' },
-        room_3: { occupied: true, name: 'Reception' },
-        room_4: { occupied: false, name: 'Server Room' },
-      },
-      relays: {
-        relay_1: 'ON',
-        relay_2: 'OFF',
-        relay_3: 'ON',
-        relay_4: 'OFF',
-      },
-    };
+  // getInitialState() {
+  //   return {
+  //     energy_kwh: 0,
+  //     run_seconds: 0,
+  //     lastResetDay: null,
+  //     rooms: {
+  //       relay_1: { occupied: true, name: 'Office(AC and Lighting)' },
+  //       relay_2: { occupied: false, name: 'Printing Room(Machine)' },
+  //       relay_3: { occupied: true, name: 'Woking Room(Monitor)' },
+  //       relay_4: { occupied: false, name: 'Server Room( server)' },
+  //     },
+  //     relays: {
+  //       relay_1: 'ON',
+  //       relay_2: 'OFF',
+  //       relay_3: 'OFF',
+  //       relay_4: 'ON',
+  //     },
+  //   };
+  // }
+
+  // ── Fetch rooms config from backend ──
+  async fetchRoomsConfig() {
+    try {
+      const response = await axios.get(
+        `${CONFIG.backendUrl}/rooms/device/${this.deviceId}`,
+        { timeout: 5000 }
+      );
+
+      const rooms = response.data.rooms || [];
+
+if (rooms.length === 0) {
+        console.log('No rooms configured on backend for this device.');
+        if (!this.state) {
+          this.state = {
+            energy_kwh: 0,
+            run_seconds: 0,
+            lastResetDay: null,
+            rooms: {},
+            relays: {},
+          };
+        } else {
+          this.state.rooms = {};
+          this.state.relays = {};
+        }
+        return;
+      }
+
+      const newRooms = {};
+      const newRelays = {};
+
+rooms.forEach(room => {
+        const relayId = room.relay_id;
+        const existing = this.state?.rooms?.[relayId];
+        newRooms[relayId] = {
+          occupied: room.occupied ?? false,
+          name: room.name || relayId,
+          // Each room keeps a stable "personality" once assigned, so behavior
+          // doesn't reshuffle every refresh — busy rooms stay busy.
+          activity: existing?.activity ?? (0.3 + Math.random() * 0.7),
+        };
+        newRelays[relayId] = room.relay_status || 'OFF';
+      });
+
+      if (!this.state) {
+        // first fetch — build full state
+        this.state = {
+          energy_kwh: 0,
+          run_seconds: 0,
+          lastResetDay: null,
+          rooms: newRooms,
+          relays: newRelays,
+        };
+        console.log(`Loaded ${rooms.length} room(s) from backend`);
+      } else {
+        // later refresh — merge in new rooms, keep existing energy/run data
+        this.state.rooms = { ...this.state.rooms, ...newRooms };
+        this.state.relays = { ...this.state.relays, ...newRelays };
+        console.log(`Refreshed rooms config (${rooms.length} room(s))`);
+      }
+    } catch (error) {
+      console.error('Failed to fetch rooms config:', error.message);
+      if (!this.state) {
+        this.state = {
+          energy_kwh: 0,
+          run_seconds: 0,
+          lastResetDay: null,
+          rooms: {},
+          relays: {},
+        };
+      }
+    }
   }
 
   // ── Main startup ──
   async start() {
     console.log('\n🚀 ESP32 Simulator Starting...\n');
+    console.log(__dirname);
 
-    // Check if we have saved configuration
+    // Check if we have saved configuration in the config file
     const hasConfig = this.configManager.load();
 
-    if (!hasConfig) {
+    if (CLI_SETUP_CODE) {
+      if (hasConfig) {
+        console.log('Setup code supplied - replacing saved simulator device link.');
+        this.configManager.delete();
+      }
+      await this.provision();
+    } else if (!hasConfig) {
       // Enter provisioning mode
       await this.provision();
     } else {
@@ -256,7 +359,7 @@ class ESP32Simulator {
         // Delete old config
         this.configManager.delete();
         
-        // Start provisioning
+        // Start provisioning 253391
         await this.provision();
         return;
       }
@@ -274,23 +377,26 @@ class ESP32Simulator {
     }
 
     // Start MQTT and monitoring
+    // Load rooms config from backend before starting
+    await this.fetchRoomsConfig();
+
+    // Start MQTT and monitoring
     this.startMonitoring();
   }
 
   // ── Provisioning Mode ──
   async provision() {
     console.log('\n Entering Provisioning Mode...');
-    console.log('Please go to your AEMS dashboard and generate a setup code for a device.');
-    console.log('   (Business: Create Account → Device Profile → Generate Setup Code)\n');
+    console.log('Generate a setup code from the AEMS dashboard (Devices → Connect ESP32).\n');
+    console.log('Tip: pass --setup-code 123456 to skip the prompt.\n');
 
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = CLI_SETUP_CODE ? 1 : 3;
 
     while (attempts < maxAttempts) {
       attempts++;
-      
-      // Ask for setup code
-      const setupCode = await askQuestion(`📱 Enter 6-digit setup code (attempt ${attempts}/${maxAttempts}): `);
+
+      const setupCode = CLI_SETUP_CODE || await askQuestion(`Enter 6-digit setup code (attempt ${attempts}/${maxAttempts}): `);
       
       if (!setupCode || !/^\d{6}$/.test(setupCode)) {
         console.log(' Invalid code format. Must be exactly 6 digits.\n');
@@ -307,14 +413,18 @@ class ESP32Simulator {
         // Save configuration
         this.configManager.save(this.deviceId, this.businessId, {
           claimed_at: new Date().toISOString(),
+          broker_url: result.broker_url,
         });
-        
-        console.log(`\n✅ Device successfully provisioned!`);
+
+        console.log(`\nDevice successfully provisioned!`);
         console.log(`  Device ID: ${this.deviceId}`);
         console.log(`  Business ID: ${this.businessId}`);
-        console.log('   Configuration saved for future runs\n');
-        
-        rl.close();
+        console.log(`  MQTT: ${result.broker_url}`);
+        console.log('  Configuration saved for future runs\n');
+
+        if (!CLI_SETUP_CODE) {
+          rl.close();
+        }
         return;
       } else {
         console.log(`Provisioning failed: ${result.error || 'Unknown error'}`);
@@ -326,21 +436,33 @@ class ESP32Simulator {
     }
 
     console.log(' Too many failed attempts. Exiting.');
-    rl.close();
+    if (!CLI_SETUP_CODE) {
+      rl.close();
+    }
     process.exit(1);
   }
 
+  getMqttBrokerUrl() {
+    return this.configManager.getBrokerUrl();
+  }
+
   // ── Start Monitoring ──
-  startMonitoring() {
+startMonitoring() {
     this.connectMQTT();
+
+    // Refresh rooms config every 60 seconds to pick up new rooms
+    this.roomsRefreshInterval = setInterval(() => {
+      this.fetchRoomsConfig();
+    }, 60000);
   }
 
   // ── MQTT Connection ──
   connectMQTT() {
-    console.log(`Connecting to MQTT broker: ${CONFIG.brokerUrl}`);
+    const brokerUrl = this.getMqttBrokerUrl();
+    console.log(`Connecting to MQTT broker: ${brokerUrl}`);
     console.log(`Device: ${this.deviceId}\n`);
 
-    this.client = mqtt.connect(CONFIG.brokerUrl, {
+    this.client = mqtt.connect(brokerUrl, {
       clientId: `esp32-${this.deviceId}-${Date.now()}`,
       clean: true,
     });
@@ -382,9 +504,10 @@ class ESP32Simulator {
           const command = JSON.parse(message.toString());
           console.log(`\n📨 COMMAND RECEIVED:`, command);
 
-          if (command.relay_id && command.action) {
-            this.state.relays[command.relay_id] = command.action;
-            console.log(`   → ${command.relay_id} set to ${command.action}\n`);
+          if (command.relay_id && (command.status || command.action)) {
+            const status = command.status || command.action;
+            this.state.relays[command.relay_id] = status;
+            console.log(`   -> ${command.relay_id} set to ${status}\n`);
           }
         } catch (error) {
           console.error(' Failed to parse command:', error.message);
@@ -407,6 +530,7 @@ class ESP32Simulator {
       console.log('MQTT not connected, waiting...');
       return;
     }
+
 
     this.state.run_seconds += CONFIG.intervalMs / 1000;
     this.resetDailyIfNewDay();
@@ -453,9 +577,9 @@ class ESP32Simulator {
 
   generateCurrent(rooms, relays) {
     let total = 0;
-    if (relays.relay_1 === 'ON') total += rooms.room_1.occupied ? 3.2 : 0.1;
-    if (relays.relay_2 === 'ON') total += rooms.room_2.occupied ? 4.8 : 0.1;
-    if (relays.relay_3 === 'ON') total += rooms.room_3.occupied ? 2.1 : 0.1;
+    if (relays.relay_1 === 'ON') total += rooms.relay_1?.occupied ? 3.2 : 0.1;
+    if (relays.relay_2 === 'ON') total += rooms.relay_2?.occupied ? 4.8 : 0.1;
+    if (relays.relay_3 === 'ON') total += rooms.relay_3?.occupied ? 2.1 : 0.1;
     if (relays.relay_4 === 'ON') total += 1.8;
     total += (Math.random() - 0.5) * 0.3;
     return Math.round(Math.max(0.1, total) * 100) / 100;
@@ -463,54 +587,48 @@ class ESP32Simulator {
 
 generateRoomCurrents(rooms, relays) {
   const result = {};
-  const roomRelayMap = {
-    room_1: 'relay_1',
-    room_2: 'relay_2',
-    room_3: 'relay_3',
-    room_4: 'relay_4',
-  };
 
-  for (const [roomId, room] of Object.entries(rooms)) {
-    const relayId = roomRelayMap[roomId];
+  for (const [relayId, room] of Object.entries(rooms)) {
     const relayOn = relays[relayId] === 'ON';
 
     let current = 0;
     if (relayOn) {
       current = room.occupied ? (1.5 + Math.random() * 2) : 0.05;
-      if (roomId === 'room_4') current = 1.8 + Math.random() * 0.3;
+      if (relayId === 'relay_4') current = 1.8 + Math.random() * 0.3;
     }
 
-    result[roomId] = {
+    result[relayId] = {
+      relay: relayId,
       name: room.name,
       occupied: room.occupied,
       current_a: Math.round(current * 100) / 100,
-      // ── ✅ NEW: Include relay status ──
       relay_status: relayOn ? 'ON' : 'OFF',
     };
   }
   return result;
 }
 
-  simulateOccupancyChanges() {
-    for (const [roomId, room] of Object.entries(this.state.rooms)) {
-      if (roomId === 'room_4') continue;
+simulateOccupancyChanges() {
+    const hour = new Date().getHours();
+    // Work hours skew rooms toward occupied; nights/early morning skew toward empty.
+    const isWorkHours = hour >= 7 && hour <= 19;
+    const timeBias = isWorkHours ? 1.3 : 0.4;
 
-      if (Math.random() < 0.10) {
-        this.state.rooms[roomId].occupied = !room.occupied;
+    for (const [relayId, room] of Object.entries(this.state.rooms)) {
+      const activity = room.activity ?? 0.5;
 
-        const relayMap = {
-          room_1: 'relay_1',
-          room_2: 'relay_2',
-          room_3: 'relay_3',
-        };
-        const relayId = relayMap[roomId];
-        if (relayId) {
-          this.state.relays[relayId] = this.state.rooms[roomId].occupied ? 'ON' : 'OFF';
-        }
+      // Occupied rooms are "stickier" — less likely to suddenly go empty
+      // than an empty room is to suddenly become occupied (when it's busy hours).
+      const flipChance = room.occupied
+        ? 0.04 * activity
+        : 0.08 * activity * timeBias;
 
-        const status = this.state.rooms[roomId].occupied ? 'OCCUPIED' : 'EMPTY';
-        console.log(`👤 ${room.name} → ${status}`);
+      if (Math.random() < flipChance) {
+        this.state.rooms[relayId].occupied = !room.occupied;
+        this.state.relays[relayId] = this.state.rooms[relayId].occupied ? 'ON' : 'OFF';
       }
+              const status = this.state.rooms[relayId].occupied ? 'OCCUPIED' : 'EMPTY';
+        console.log(`${room.name} → ${status}`);
     }
   }
 
@@ -544,6 +662,9 @@ generateRoomCurrents(rooms, relays) {
     
     if (this.interval) {
       clearInterval(this.interval);
+    }
+    if (this.roomsRefreshInterval) {
+      clearInterval(this.roomsRefreshInterval);
     }
 
     if (this.client && this.client.connected) {

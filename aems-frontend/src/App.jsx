@@ -1,13 +1,10 @@
-// ═══════════════════════════════════════════════════════════
-//  AEMS FRONTEND — Main App
-//  Automated Energy Management System
-//  University of Buea — LEKEUGO DEMELIEU ROCHINEL FE22A247
-// ═══════════════════════════════════════════════════════════
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider} from './context/AuthContext';
 import { useAuth } from './hooks/useAuth';
-import { ESP32SetupPage } from './pages/ESP32SetupPage';
+
+
+//here is another new importation
 
 import LoginPage     from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -17,9 +14,10 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import SettingsPage  from './pages/SettingsPage';
 import Layout        from './components/layout/Layout';
 
-// ── NEW IMPORTS ──
-import { RegistrationSuccess } from './pages/RegistrationSuccess';
+// import { RegistrationSuccess } from './pages/RegistrationSuccess';
 import { DeviceManagement } from './pages/DeviceManagement';
+import { ESP32SetupPage } from './pages/ESP32SetupPage';
+
 
 import './App.css';
 
@@ -56,8 +54,7 @@ function App() {
           {/* ── Public Routes ── */}
           <Route path="/login" element={<LoginPage />} />
           
-          {/* ── NEW: Registration Success Page (Public) ── */}
-          <Route path="/registration-success" element={<RegistrationSuccess />} />
+          {/* <Route path="/registration-success" element={<RegistrationSuccess />} /> */}
 
           <Route path="/setup-esp32" element={<ESP32SetupPage />} />
 

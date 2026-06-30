@@ -16,7 +16,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "backend": "npm --prefix aems-backend start",
+    "frontend": "npm --prefix aems-frontend run dev",
+    "simulate-esp32": "npm --prefix aems-backend run simulate-esp32"
   },
   "repository": {
     "type": "git",

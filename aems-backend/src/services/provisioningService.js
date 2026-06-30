@@ -4,6 +4,14 @@ const db = require('../config/firebase');
 // Get the deviceSetup reference
 const deviceSetup = db.ref('device_setup');
 
+const getMqttConfigForDevice = () => {
+  const host = process.env.MQTT_BROKER_HOST
+    || (process.env.MQTT_BROKER_URL || '').replace(/^mqtts?:\/\//, '').split(':')[0]
+    || 'localhost';
+  const port = Number(process.env.MQTT_BROKER_PORT || 1883);
+  return { mqtt_broker: host, mqtt_port: port };
+};
+
 /**
  * Generate a unique 6-digit setup code
  */
@@ -160,16 +168,21 @@ const claimDevice = async (code, macAddress = null, firmwareVersion = null) => {
     // Get business settings
     const businessSnapshot = await db.ref(`businesses/${setupData.business_id}/settings`).once('value');
     const businessSettings = businessSnapshot.exists() ? businessSnapshot.val() : {};
+    const mqttConfig = getMqttConfigForDevice();
 
     return {
       success: true,
       device_id: deviceId,
       business_id: setupData.business_id,
       message: 'Device claimed successfully!',
+      mqtt_broker: mqttConfig.mqtt_broker,
+      mqtt_port: mqttConfig.mqtt_port,
       configuration: {
         device_id: deviceId,
         business_id: setupData.business_id,
         settings: businessSettings,
+        mqtt_broker: mqttConfig.mqtt_broker,
+        mqtt_port: mqttConfig.mqtt_port,
       }
     };
 
@@ -202,6 +215,7 @@ const getDeviceConfiguration = async (deviceId) => {
 
     const businessSnapshot = await db.ref(`businesses/${businessId}/settings`).once('value');
     const businessSettings = businessSnapshot.exists() ? businessSnapshot.val() : {};
+    const mqttConfig = getMqttConfigForDevice();
 
     return {
       success: true,
@@ -213,7 +227,9 @@ const getDeviceConfiguration = async (deviceId) => {
         settings: businessSettings,
         hardware: device.hardware || {},
         device_name: device.device_name || '',
-        firmware_version: device.firmware_version || '1.0.0'
+        firmware_version: device.firmware_version || '1.0.0',
+        mqtt_broker: mqttConfig.mqtt_broker,
+        mqtt_port: mqttConfig.mqtt_port,
       }
     };
 
@@ -259,9 +275,90 @@ const cleanupExpiredCodes = async () => {
   }
 };
 
+/**
+ * Get provisioning status for a device (dashboard polling)
+ */
+const getDeviceProvisionStatus = async (deviceId) => {
+  try {
+    const deviceSnapshot = await db.ref(`devices/${deviceId}`).once('value');
+    if (!deviceSnapshot.exists()) {
+      return {
+        success: false,
+        error: 'DEVICE_NOT_FOUND',
+        message: 'Device not found',
+      };
+    }
+
+    const device = deviceSnapshot.val();
+    return {
+      success: true,
+      device_id: deviceId,
+      provisioning_completed: !!device.provisioning_completed,
+      is_online: !!device.is_online,
+      last_seen: device.last_seen || null,
+      mac_address: device.mac_address || null,
+      firmware_version: device.firmware_version || null,
+      device_name: device.device_name || '',
+    };
+  } catch (error) {
+    console.error('getDeviceProvisionStatus error:', error.message);
+    return {
+      success: false,
+      error: 'STATUS_FETCH_FAILED',
+      message: error.message,
+    };
+  }
+};
+
+/**
+ * Reset device provisioning so it can be re-paired
+ */
+const resetDeviceProvisioning = async (deviceId, businessId) => {
+  try {
+    const deviceSnapshot = await db.ref(`devices/${deviceId}`).once('value');
+    if (!deviceSnapshot.exists()) {
+      return { success: false, error: 'DEVICE_NOT_FOUND', message: 'Device not found' };
+    }
+
+    const device = deviceSnapshot.val();
+    if (device.business_id !== businessId) {
+      return { success: false, error: 'UNAUTHORIZED', message: 'Device does not belong to your business' };
+    }
+
+    await db.ref(`devices/${deviceId}`).update({
+      provisioning_completed: false,
+      mac_address: null,
+      is_online: false,
+      last_seen: null,
+      claimed_at: null,
+      reset_at: new Date().toISOString(),
+    });
+
+    await deviceSetup.child(deviceId).remove();
+
+    const codeResult = await createSetupCode(deviceId, businessId, 15);
+    return {
+      success: true,
+      device_id: deviceId,
+      setup_code: codeResult.setup_code,
+      expires_at: codeResult.expires_at,
+      message: 'Device reset. Use the new setup code on the ESP32 portal.',
+    };
+  } catch (error) {
+    console.error('resetDeviceProvisioning error:', error.message);
+    return {
+      success: false,
+      error: 'RESET_FAILED',
+      message: error.message,
+    };
+  }
+};
+
 module.exports = {
   createSetupCode,
   claimDevice,
   getDeviceConfiguration,
-  cleanupExpiredCodes
+  getDeviceProvisionStatus,
+  resetDeviceProvisioning,
+  cleanupExpiredCodes,
 };

@@ -124,9 +124,7 @@ export default function LoginPage() {
 
     try {
       // Step 1: Create business
-      const generatedBizId = 'biz_' + Date.now();
-      await api.post('/api/business/create', {
-        business_id: generatedBizId,
+      const businessResult = await api.post('/api/business/create', {
         name: bizName.trim(),
         owner_name: name.trim(),
         owner_email: email.trim(),
@@ -134,6 +132,7 @@ export default function LoginPage() {
         location: location.trim(),
         business_type: business_type.trim(),
       });
+      const generatedBizId = businessResult.data.businessId;
 
       // Step 2: Create user
       await api.post('/api/auth/register', {
@@ -147,12 +146,10 @@ export default function LoginPage() {
       await login(email, password);
       
       // Step 4: Create device
-      const generatedDeviceId = 'dev_' + Date.now();
-      await api.post('/api/device/NewDevice', {
-        deviceId: generatedDeviceId,
-        businessId: generatedBizId,
+      const deviceResult = await api.post('/api/device/new-device', {
         name: devicename
       });
+      const generatedDeviceId = deviceResult.data.deviceId;
 
       // ── Generate setup code automatically ──
       const setupResult = await provisionApi.generateSetupCode(generatedDeviceId);
@@ -188,14 +185,12 @@ export default function LoginPage() {
   // ── Handle Setup Modal Close - Navigate to Success Page ──
   const handleSetupModalClose = () => {
     setShowSetupModal(false);
-    // Navigate to the success page with the device data
-    navigate('/registration-success', { 
+    navigate('/setup-esp32', {
       state: {
-        deviceName: setupData.deviceName,
-        deviceId: setupData.deviceId,
         setupCode: setupData.setupCode,
-        businessId: setupData.businessId
-      }
+        deviceId: setupData.deviceId,
+        deviceName: setupData.deviceName,
+      },
     });
   };
 
@@ -322,7 +317,7 @@ export default function LoginPage() {
                   <p style={{ color: '#64748b', fontSize: '12px', margin: '0 0 12px', textAlign: 'center' }}>Set up your master administrative credentials.</p>
                   
                   <label style={{ ...labelStyle, marginTop: '0px' }}>Your full name</label>
-                  <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Rochinel lekeugo" style={inputStyle} />
+                  <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Business owner name" style={inputStyle} />
                   
                   <label style={labelStyle}>Email Address</label>
                   <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="E@mail.com" style={inputStyle} />
@@ -392,8 +387,8 @@ export default function LoginPage() {
           deviceName={setupData.deviceName}
           deviceId={setupData.deviceId}
           setupCode={setupData.setupCode}
-          businessId={setupData.businessId}
           onClose={handleSetupModalClose}
+          // closeLabel="Go to Device Setup"
         />
       )}
     </div>

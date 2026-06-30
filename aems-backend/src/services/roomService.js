@@ -42,7 +42,10 @@ const getRoomsByBusiness = async (businessId) => {
     const rooms = [];
     snapshot.forEach((child) => {
       rooms.push({ id: child.key, ...child.val() });
+      
     });
+
+    // console.log(rooms);
 
     return rooms;
 
@@ -61,6 +64,18 @@ const getRoomById = async (businessId, roomId) => {
   } catch (error) {
     console.error('getRoomById error:', error.message);
     throw new Error(`Failed to get room: ${error.message}`);
+  }
+};
+
+const getRoomByRelay = async (businessId, deviceId, relayId) => {
+  try {
+    const rooms = await getRoomsByBusiness(businessId);
+    return rooms.find((room) => (
+      room.device_id === deviceId && room.relay_id === relayId
+    )) || null;
+  } catch (error) {
+    console.error('getRoomByRelay error:', error.message);
+    throw new Error(`Failed to get room by relay: ${error.message}`);
   }
 };
 
@@ -161,6 +176,7 @@ module.exports = {
   createRoom,
   getRoomsByBusiness,
   getRoomById,
+  getRoomByRelay,
   updateRoomOccupancy,
   updateRelayStatus,
   updateRoomState, // Exported fixed hook

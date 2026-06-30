@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 export function SetupCodeModal({ 
   deviceName, 
   deviceId, 
   setupCode, 
-  businessId, 
-  onClose 
+  onClose,
+  closeLabel = 'Continue',
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -170,9 +170,10 @@ export function SetupCodeModal({
             lineHeight: '1.8'
           }}>
             <li>Copy the <strong style={{ color: '#10b981' }}>Setup Code</strong> above</li>
-            <li>Go to your <strong style={{ color: '#ffffff' }}>ESP32 device</strong> / Simulator</li>
-            <li>Enter the code when prompted during <strong style={{ color: '#ffffff' }}>provisioning</strong></li>
-            <li>Your device will automatically connect and start sending data</li>
+            <li>Power on your ESP32 and connect to WiFi <strong style={{ color: '#10b981' }}>AEMS-Setup-XXXX</strong></li>
+            <li>Open <strong style={{ color: '#ffffff' }}>http://192.168.4.1</strong> on your phone</li>
+            <li>Enter your office WiFi credentials and the setup code</li>
+            <li>Your device will connect and appear on the dashboard</li>
           </ol>
         </div>
 
@@ -212,7 +213,7 @@ export function SetupCodeModal({
               minWidth: '140px'
             }}
           >
-            Go to Login
+            {closeLabel}
           </button>
         </div>
 

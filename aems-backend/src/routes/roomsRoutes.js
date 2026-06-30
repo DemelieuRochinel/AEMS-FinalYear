@@ -11,6 +11,30 @@ const router       = express.Router();
 const roomService  = require('../services/roomService');
 const mqttService  = require('../services/mqttService');
 const { authenticate, requireRole } = require('../middleware/authentication');
+const { randomUUID } = require('crypto');
+
+//  GET /api/rooms/device/:deviceId — used by ESP32/simulator (no user auth)
+router.get('/device/:deviceId', async (req, res) => {
+  try {
+    const deviceService = require('../services/deviceService');
+    const device = await deviceService.getDeviceById(req.params.deviceId);
+
+    if (!device) {
+      return res.status(404).json({ error: 'Device not found' });
+    }
+
+    const rooms = await roomService.getRoomsByBusiness(device.business_id);
+    const deviceRooms = rooms.filter(room => room.device_id === device.id);
+
+    return res.status(200).json({
+      count: deviceRooms.length,
+      rooms: deviceRooms,
+    });
+  } catch (error) {
+    console.error('GET /rooms/device/:deviceId:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
 
 router.use(authenticate);
 
@@ -150,11 +174,11 @@ router.patch('/:id/auto',
 );
 
 //  POST /api/rooms — Create a new room
-router.post('/rooms',
+router.post('/',
   requireRole('owner', 'staff', 'technician', 'BusinessOwner'),  // ✅ Added role check
   async (req, res) => {
     try {
-      const { name, device_type, relay_id, pir_gpio_pin, auto_shutdown } = req.body;
+      const { name, device_type, relay_id, pir_gpio_pin, auto_shutdown, device_id, floor } = req.body;
       
       if (!name || !relay_id) {
         return res.status(400).json({ error: 'name and relay_id are required' });
@@ -162,9 +186,24 @@ router.post('/rooms',
 
       const deviceService = require('../services/deviceService');
       const devices = await deviceService.getDevicesByBusiness(req.user.businessId);
-      const deviceId = devices.length > 0 ? devices[0].id : 'device_BUEA001';
+      const deviceId = device_id || (devices.length > 0 ? devices[0].id : null);
 
-      const roomId = `room_${Date.now()}`;
+      if (!deviceId) {
+        return res.status(400).json({
+          error: 'No device found',
+          message: 'Create a device before adding rooms.',
+        });
+      }
+
+      const selectedDevice = devices.find((device) => device.id === deviceId);
+      if (!selectedDevice) {
+        return res.status(400).json({
+          error: 'Invalid device',
+          message: 'Select a device that belongs to your business.',
+        });
+      }
+
+      const roomId = `room_${randomUUID()}`;
       await roomService.createRoom(req.user.businessId, roomId, {
         device_id: deviceId,
         name,
@@ -172,6 +211,7 @@ router.post('/rooms',
         device_type: device_type || 'lights',
         auto_shutdown: auto_shutdown ?? true,
         pir_gpio_pin: pir_gpio_pin || null,
+        floor: floor || selectedDevice.location || 'Main floor',
       });
 
       return res.status(201).json({ 
@@ -184,7 +224,8 @@ router.post('/rooms',
           relay_id,
           device_type,
           auto_shutdown,
-          device_id: deviceId
+          device_id: deviceId,
+          floor: floor || selectedDevice.location || 'Main floor'
         }
       });
     } catch (err) {

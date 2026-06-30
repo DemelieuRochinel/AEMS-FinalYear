@@ -14,6 +14,7 @@ const readingsService = require('./readingsService');
 const deviceService   = require('./deviceService');
 const alertsService   = require('./alertsService');
 const roomService     = require('./roomService');
+const businessService = require('./businessService');
 
 //MQTT topic definitions
 const TOPICS = {
@@ -89,7 +90,7 @@ const _onConnect = () => {
 const _onMessage = async (topic, messageBuffer) => {
   const message = messageBuffer.toString();
 
-  // Extract device_id from topic: "aems/device_BUEA001/readings"
+  // Extract device_id from topic: "aems/{device_id}/readings"
   const topicParts = topic.split('/');
   const deviceId   = topicParts[1];
   const messageType = topicParts[2];
@@ -199,10 +200,18 @@ const _handleHardwareAlert = async (deviceId, data) => {
 //  PRIVATE — Check voltage thresholds and create alerts
 const _checkVoltageAlerts = async (businessId, deviceId, mainData) => {
   if (!mainData || !mainData.voltage) return;
-//here we are checking the main voltage in the system at that time.
-  const voltage   = mainData.voltage;
-  const minV      = 190;
-  const maxV      = 245;
+
+  const voltage = mainData.voltage;
+  let settings = {};
+
+  try {
+    settings = await businessService.getBusinessSettings(businessId);
+  } catch (err) {
+    console.warn(`Using default voltage thresholds for ${businessId}: ${err.message}`);
+  }
+
+  const minV = Number(settings.voltage_min ?? 190);
+  const maxV = Number(settings.voltage_max ?? 245);
 
   if (voltage < minV) {
     console.warn(`LOW VOLTAGE: ${voltage}V (min: ${minV}V)`);
@@ -243,11 +252,29 @@ const _checkVoltageAlerts = async (businessId, deviceId, mainData) => {
 //  ── PRIVATE — Update room occupancy from PIR sensor data ──
 //  ✅ UPDATED: Now saves room names and current readings
 //  ── PRIVATE — Update room occupancy AND relay status from ESP32 data ──
+const _resolveRoomForReading = async (businessId, deviceId, incomingRoomId, roomData) => {
+  if (roomData.room_id) {
+    const existing = await roomService.getRoomById(businessId, roomData.room_id);
+    return existing || { id: roomData.room_id };
+  }
+
+  const relayId = roomData.relay || roomData.relay_id || incomingRoomId;
+  if (!relayId) {
+    return incomingRoomId;
+  }
+
+  const room = await roomService.getRoomByRelay(businessId, deviceId, relayId);
+  return room || { id: incomingRoomId };
+};
+
 const _updateRoomStates = async (businessId, deviceId, roomsData) => {
   if (!roomsData) return;
 
-  for (const [roomId, roomData] of Object.entries(roomsData)) {
+  for (const [incomingRoomId, roomData] of Object.entries(roomsData)) {
     try {
+      const room = await _resolveRoomForReading(businessId, deviceId, incomingRoomId, roomData);
+      const roomId = room.id;
+
       // Prepare update data
       const updates = {
         last_seen: new Date().toISOString(),
@@ -262,7 +289,7 @@ const _updateRoomStates = async (businessId, deviceId, roomsData) => {
           updates.last_motion = new Date().toISOString();
           updates.empty_since = null;
         } else {
-          updates.empty_since = new Date().toISOString();
+          updates.empty_since = room.empty_since || new Date().toISOString();
         }
       }
       
@@ -280,7 +307,7 @@ const _updateRoomStates = async (businessId, deviceId, roomsData) => {
       }
       
       // Save room name if provided
-      if (roomData.name) {
+      if (roomData.name && !room.name) {
         updates.name = roomData.name;
       }
       

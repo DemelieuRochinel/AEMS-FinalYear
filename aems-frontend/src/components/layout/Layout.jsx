@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { useAuth }   from '../../context/AuthContext';
+import { useAuth }   from '../../hooks/useAuth';
 import { useSocket } from '../../hooks/useSocket';
 
 const NAV = [
   { to: '/',          emoji: '📊', label: 'Dashboard'  },
+  { to: '/devices',   emoji: '🔌', label: 'Devices'    },
   { to: '/rooms',     emoji: '🏠', label: 'Rooms'      },
   { to: '/alerts',    emoji: '🔔', label: 'Alerts'     },
   { to: '/analytics', emoji: '📈', label: 'Analytics'  },
@@ -151,20 +152,40 @@ export default function Layout() {
       }}
         className="desktop-sidebar"
       >
-        <SidebarContent />
+        {SidebarContent()}
       </aside>
 
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          onClick={() => setMobile(false)}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-            zIndex: 100, display: 'none',
-          }}
-          className="mobile-overlay"
-        />
-      )}
+{/* Mobile overlay */}
+<div
+  onClick={() => setMobile(false)}
+  className="mobile-overlay"
+  style={{
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+    zIndex: 100,
+    opacity: mobileOpen ? 1 : 0,
+    pointerEvents: mobileOpen ? 'auto' : 'none',
+    transition: 'opacity 0.2s ease',
+  }}
+/>
+
+{/* Mobile sliding sidebar */}
+<aside
+  className="mobile-sidebar"
+  style={{
+    position:      'fixed',
+    top: 0, left: 0, bottom: 0,
+    width:         '260px',
+    background:    'var(--bg-panel)',
+    borderRight:   '1px solid var(--border)',
+    display:       'flex',
+    flexDirection: 'column',
+    zIndex:        101,
+    transform:     mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
+    transition:    'transform 0.25s ease',
+  }}
+>
+  {SidebarContent()}
+</aside>
 
       {/* Main content */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -192,13 +213,16 @@ export default function Layout() {
         </main>
       </div>
 
-      <style>{`
-        @media (max-width: 768px) {
-          .desktop-sidebar { display: none !important; }
-          .mobile-topbar { display: flex !important; }
-          .mobile-overlay { display: block !important; }
-        }
-      `}</style>
+<style>{`
+  @media (max-width: 768px) {
+    .desktop-sidebar { display: none !important; }
+    .mobile-topbar   { display: flex !important; }
+  }
+  @media (min-width: 769px) {
+    .mobile-sidebar  { display: none !important; }
+    .mobile-overlay  { display: none !important; }
+  }
+`}</style>
     </div>
   );
 }

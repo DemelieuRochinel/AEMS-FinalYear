@@ -1,10 +1,9 @@
 // AUTH CONTEXT
 // Global authentication state — available everywhere in app
 
-import { createContext, useState, useEffect, useContext } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../api/axiosConfig';
-
-export const AuthContext = createContext(null);
+import { AuthContext } from './auth-context';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -103,17 +102,4 @@ export const AuthProvider = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
-};
-
-// Custom Hook
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-
-  if (!ctx) {
-    throw new Error(
-      'useAuth must be used inside AuthProvider'
-    );
-  }
-
-  return ctx;
 };
